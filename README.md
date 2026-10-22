@@ -1,0 +1,53 @@
+# Vault Constellation
+
+A [Hermes Desktop](https://hermes-agent.nousresearch.com) plugin that opens a local markdown vault (Obsidian-style `[[wikilinks]]`) as **one tab in the main workspace**: a collapsible file tree, a force-directed graph of your notes, and a tabbed editor pane behind a divider that can collapse either side completely.
+
+**Local only.** Notes are read and written through the desktop app's Electron file bridge on the machine running Hermes Desktop. There is no backend, REST route, network access, or agent tool. Hermes' own agent keeps using whatever it already uses for notes.
+
+## Use
+
+Open it from the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). On first open, choose the folder that holds your notes. Settings live under **Settings → Plugins → Vault Constellation**.
+
+| Area | What it does |
+|---|---|
+| **File tree** (left, collapsible) | `.md` notes by folder. New, rename, move to trash (recoverable), drag a note onto a folder to move it. Keyboard: arrows, Enter, F2 to rename. `archive`/`_archived` and dot-folders are skipped by default (configurable). The active note is revealed automatically. |
+| **Graph** (centre) | Notes are nodes, `[[wikilinks]]` are edges, clustered and coloured by top-level folder. Wheel zooms, drag pans or moves a node, click opens a note, Shift+click pins a node. Filter box (`#tag` too), local graph (this note + neighbours), show/hide unlinked notes, click the legend to hide a folder. Arrow keys hop between linked notes, Enter opens, P pins. Layout is remembered per vault. Notes changed by something else (e.g. the agent) get a dashed halo for ten minutes. |
+| **Note pane** (right, appears when a note is open) | A tab per note, markdown editor with autosave, `[[` autocomplete, Ctrl/⌘-click on a wikilink to follow it (a missing target is created next to the current note), Edit/Preview toggle, backlinks list, and **Add to chat** (inserts `@file:<path>` into the composer). Drag the divider to 0% or 100% to hide either side; double-click resets it; it is also keyboard-operable. |
+
+Open tabs, the active note, expanded folders, pinned nodes and graph layout are remembered per vault. A clean open note reloads itself when it changes on disk; if you have unsaved edits when that happens, saving is refused until you choose **Reload from disk** or **Overwrite**.
+
+Renaming or moving a note rewrites the links that pointed at it (aliases, headings and embeds preserved; links inside code are left alone). Notes with unsaved edits are skipped and reported.
+
+## Install
+
+Copy `dist/plugin.js` to `<HERMES_HOME>/desktop-plugins/vault-constellation/plugin.js` (the folder name must equal the plugin id), or from a checkout:
+
+```
+npm install
+npm run deploy      # builds, then copies into <HERMES_HOME>/desktop-plugins/vault-constellation/
+```
+
+Hermes watches that folder and hot-reloads the plugin on every save; no rebuild of the desktop app is needed. Requires Hermes Desktop with `host.openWorkspace` (≥ 0.21.5 per the SDK docs).
+
+## Develop
+
+```
+npm test            # builds dist/plugin.js, then runs unit, component and bundle smoke tests
+npm run typecheck
+```
+
+`src/model.ts` (links, tags, graph, rewriting), `src/store.ts` (scanning, tabs, file operations) and `src/vault-fs.ts` (the disk door) are framework-free and tested against an in-memory disk (`test/fake-disk.ts`). `test/bundle.test.tsx` loads the **built** file against a stub SDK.
+
+## Known limits
+
+- No live file watching: the vault rescans when the window regains focus (full re-read up to 1,500 notes, folder listing only above that), after saves, and on the rescan button.
+- A save is check-then-write; the bridge has no compare-and-swap, so an edit made by another program in the few milliseconds between the check and the write can be lost.
+- Notes over the bridge's 512 KiB preview cap open read-only. Images, `![[embeds]]` rendering and heading/block-level links are not implemented (embeds count as links in the graph).
+- The editor's highlighting is regex-based, not a full markdown parser.
+- UI strings are English only; add a locale object in `src/i18n.ts`.
+- Opening vault notes from links inside chat is not possible with the current plugin SDK.
+- **Catalog admission:** the bundled CodeMirror (`@codemirror/language`, pulled in by `@codemirror/autocomplete`/`commands`) runs `Object.defineProperty(EditorState.prototype, "tree", …)` at load. That is the library extending its own class, but Hermes' static admission lint flags the pattern. It does not affect loading from disk.
+
+## License
+
+MIT
