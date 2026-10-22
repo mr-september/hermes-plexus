@@ -32,7 +32,7 @@ Renaming or moving a note rewrites the links that pointed at it (aliases, headin
 
 ## Install
 
-Copy `dist/plugin.js` to `<HERMES_HOME>/desktop-plugins/hermes-plexus/plugin.js` (the folder name must equal the plugin id), or from a checkout:
+Copy `desktop/plugin.js` to `<HERMES_HOME>/desktop-plugins/hermes-plexus/plugin.js` (the folder name must equal the plugin id), or from a checkout:
 
 ```
 npm install
@@ -44,7 +44,7 @@ Hermes watches that folder and hot-reloads the plugin on every save; no rebuild 
 ## Develop
 
 ```
-npm test            # builds dist/plugin.js, then runs unit, component and bundle smoke tests
+npm test            # builds desktop/plugin.js, then runs unit, component and bundle smoke tests
 npm run typecheck
 ```
 
@@ -57,7 +57,12 @@ npm run typecheck
 - Notes over the bridge's 512 KiB preview cap open read-only. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
 - The editor's highlighting is regex-based, not a full markdown parser.
 - UI strings are English only; add a locale object in `src/i18n.ts`.
-- **Catalog admission:** the bundled CodeMirror (`@codemirror/language`, pulled in by `@codemirror/autocomplete`/`commands`) runs `Object.defineProperty(EditorState.prototype, "tree", …)` at load. That is the library extending its own class, but Hermes' static admission lint flags the pattern. It does not affect loading from disk.
+
+## Build notes
+
+`desktop/plugin.js` is the **built** bundle and is committed, because that is the file Hermes installs and loads (`hermes plugins validate .` checks it). Rebuild it with `npm run build` after changing `src/`; `npm test` rebuilds it first.
+
+One line of a dependency is rewritten at build time (`scripts/build.mjs`): `@codemirror/language` extends its own `EditorState` class with `Object.defineProperty(EditorState.prototype, "tree", …)`. That is a bundled library adjusting a class it ships, which the catalog rules allow, but Hermes' static admission lint matches the literal `Object.defineProperty(<X>.prototype` and cannot tell the difference. The build swaps it for the equivalent `Reflect.defineProperty`, and fails if the library's line ever changes so the rewrite cannot go stale.
 
 ## License
 

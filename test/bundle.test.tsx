@@ -1,5 +1,5 @@
 /**
- * Smoke-tests the SHIPPED file (dist/plugin.js), not the sources: it must evaluate with only the
+ * Smoke-tests the SHIPPED file (desktop/plugin.js), not the sources: it must evaluate with only the
  * SDK and React external, default-export a plugin, and register + open through the SDK surface.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -15,7 +15,7 @@ let plugin: { id: string; register: (ctx: unknown) => void }
 
 beforeAll(async () => {
   // @ts-expect-error the built file has no types
-  plugin = (await import('../dist/plugin.js')).default
+  plugin = (await import('../desktop/plugin.js')).default
 })
 
 afterEach(() => {
@@ -45,10 +45,10 @@ function makeCtx() {
   }
 }
 
-describe('dist/plugin.js', () => {
+describe('desktop/plugin.js', () => {
   it('has the expected identity and nothing but SDK and React as external imports', async () => {
     const { readFileSync } = await import('node:fs')
-    const source = readFileSync('dist/plugin.js', 'utf8')
+    const source = readFileSync('desktop/plugin.js', 'utf8')
     const specs = new Set([...source.matchAll(/^import\b[^;]*?from\s*["']([^"']+)["']/gm)].map(m => m[1]))
 
     expect([...specs].sort()).toEqual(['@hermes/plugin-sdk', 'react', 'react/jsx-runtime'])
