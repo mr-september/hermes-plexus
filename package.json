@@ -1,5 +1,5 @@
 {
-  "name": "hermes-vault-constellation",
+  "name": "hermes-plexus",
   "version": "0.1.0",
   "description": "Hermes Desktop plugin: a local markdown vault as a note constellation, with file tree and tabbed editor in one workspace tab.",
   "private": true,

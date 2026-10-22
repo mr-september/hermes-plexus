@@ -52,7 +52,7 @@ describe('dist/plugin.js', () => {
     const specs = new Set([...source.matchAll(/^import\b[^;]*?from\s*["']([^"']+)["']/gm)].map(m => m[1]))
 
     expect([...specs].sort()).toEqual(['@hermes/plugin-sdk', 'react', 'react/jsx-runtime'])
-    expect(plugin.id).toBe('vault-constellation')
+    expect(plugin.id).toBe('hermes-plexus')
   })
 
   it('registers a palette command and a keybind, installs styles, and opens one workspace tab', () => {
@@ -71,7 +71,7 @@ describe('dist/plugin.js', () => {
       'transcript.directives:note-link'
     ])
     expect(registered.find(r => r.area === 'keybinds')?.data?.defaults).toEqual(['mod+shift+g'])
-    expect(document.getElementById('vault-constellation-styles')).not.toBeNull()
+    expect(document.getElementById('hermes-plexus-styles')).not.toBeNull()
     expect(ctx.registerSettingsPage).toHaveBeenCalledOnce()
 
     registered.find(r => r.area === 'palette')!.data!.run!()
@@ -79,14 +79,14 @@ describe('dist/plugin.js', () => {
 
     const [id, options] = open.mock.calls[0]!
 
-    expect(id).toBe('vault-constellation')
+    expect(id).toBe('hermes-plexus')
 
     // The tab body mounts and asks for a vault folder (none chosen yet).
     render(<>{options.render()}</>)
     expect(screen.getByText('Choose the folder that holds your notes.')).toBeTruthy()
 
     disposers.forEach(dispose => dispose())
-    expect(document.getElementById('vault-constellation-styles')).toBeNull()
+    expect(document.getElementById('hermes-plexus-styles')).toBeNull()
   })
 
   it('renders a chat chip for ::vault{note="…"} that opens the tab, and leaves odd attributes as text', () => {

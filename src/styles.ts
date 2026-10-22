@@ -4,7 +4,7 @@
  * app's theme variables so it reskins with every theme.
  */
 
-export const STYLE_ID = 'vault-constellation-styles'
+export const STYLE_ID = 'hermes-plexus-styles'
 
 export const CSS = `
 .vc-root {

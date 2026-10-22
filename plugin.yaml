@@ -1,11 +1,11 @@
 ---
-name: vault-constellation
+name: hermes-plexus
 version: 0.1.0
 description: A local markdown vault as a note constellation, with file tree and tabbed editor in one Hermes Desktop workspace tab.
 manifest_version: 1
 author: mr-september
 license: MIT
-homepage: https://github.com/mr-september/hermes-vault-constellation
+homepage: https://github.com/mr-september/hermes-plexus
 kind: standalone
 capabilities: []
 requires_env: []

@@ -1,4 +1,4 @@
-# Vault Constellation
+# Plexus
 
 A [Hermes Desktop](https://hermes-agent.nousresearch.com) plugin that opens a local markdown vault (Obsidian-style `[[wikilinks]]`) as **one tab in the main workspace**: a collapsible file tree, a force-directed graph of your notes, and a tabbed editor pane behind a divider that can collapse either side completely.
 
@@ -6,7 +6,7 @@ A [Hermes Desktop](https://hermes-agent.nousresearch.com) plugin that opens a lo
 
 ## Use
 
-Open it from the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). On first open, choose the folder that holds your notes. Settings live under **Settings → Plugins → Vault Constellation**.
+Open it from the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). On first open, choose the folder that holds your notes. Settings live under **Settings → Plugins → Plexus**.
 
 | Area | What it does |
 |---|---|
@@ -32,11 +32,11 @@ Renaming or moving a note rewrites the links that pointed at it (aliases, headin
 
 ## Install
 
-Copy `dist/plugin.js` to `<HERMES_HOME>/desktop-plugins/vault-constellation/plugin.js` (the folder name must equal the plugin id), or from a checkout:
+Copy `dist/plugin.js` to `<HERMES_HOME>/desktop-plugins/hermes-plexus/plugin.js` (the folder name must equal the plugin id), or from a checkout:
 
 ```
 npm install
-npm run deploy      # builds, then copies into <HERMES_HOME>/desktop-plugins/vault-constellation/
+npm run deploy      # builds, then copies into <HERMES_HOME>/desktop-plugins/hermes-plexus/
 ```
 
 Hermes watches that folder and hot-reloads the plugin on every save; no rebuild of the desktop app is needed. Requires Hermes Desktop with `host.openWorkspace` (≥ 0.21.5 per the SDK docs).

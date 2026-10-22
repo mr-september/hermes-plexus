@@ -4,7 +4,7 @@
  * Add a language by adding a sibling object here — keys must match `en`.
  */
 
-export const PLUGIN_ID = 'vault-constellation'
+export const PLUGIN_ID = 'hermes-plexus'
 
 export const en = {
   common: { cancel: 'Cancel', close: 'Close', delete: 'Delete', rename: 'Rename' },

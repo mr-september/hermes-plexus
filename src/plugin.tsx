@@ -1,5 +1,5 @@
 /**
- * Vault Constellation — a Hermes Desktop plugin that opens a local markdown vault as ONE
+ * Plexus — a Hermes Desktop plugin that opens a local markdown vault as ONE
  * tab in the main workspace zone: a collapsible file tree, a force-directed graph of notes
  * and their [[wikilinks]], and a tabbed editor pane behind a divider that can collapse
  * either side entirely.
@@ -35,7 +35,7 @@ const SAFE_TARGET = /^[^\u0000-\u001f]{1,300}$/
 const plugin: HermesPlugin = {
   description: 'Browse and edit a local markdown vault as a note graph.',
   id: PLUGIN_ID,
-  name: 'Vault Constellation',
+  name: 'Plexus',
   register(ctx) {
     const fs = getBridge()
 
@@ -102,8 +102,8 @@ const plugin: HermesPlugin = {
       {
         area: PALETTE_AREA,
         data: {
-          id: 'vault-constellation.open',
-          keywords: ['vault', 'notes', 'obsidian', 'graph', 'wiki', 'constellation'],
+          id: 'hermes-plexus.open',
+          keywords: ['vault', 'notes', 'obsidian', 'graph', 'wiki', 'constellation', 'plexus'],
           label: ctx.i18n.t('vault.open'),
           run: () => void open()
         } satisfies PaletteContribution,
@@ -114,7 +114,7 @@ const plugin: HermesPlugin = {
         data: {
           category: 'view',
           defaults: ['mod+shift+g'],
-          id: 'vault-constellation.open',
+          id: 'hermes-plexus.open',
           label: ctx.i18n.t('vault.open'),
           run: () => void open()
         } satisfies KeybindContribution,
