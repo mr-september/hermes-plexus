@@ -31,3 +31,5 @@ export function Codicon({ name }: { name: string; size?: number | string; classN
 export function Streamdown({ children }: { children?: string }): ReactNode {
   return <div data-testid="markdown">{children}</div>
 }
+
+export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directives'

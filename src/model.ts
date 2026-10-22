@@ -368,13 +368,203 @@ export function folderHue(key: string): number {
   return hash % 360
 }
 
-/** Wikilinks → markdown links the preview can intercept (`#vault/<target>`). */
+/** Wikilinks → markdown links the preview can intercept (`#vault/<target[#anchor]>`). */
 export function wikilinksToMarkdown(text: string): string {
-  return text.replace(WIKILINK, (_whole, bang: string, target: string, _heading: string, alias: string) => {
+  return text.replace(WIKILINK, (_whole, bang: string, target: string, heading: string, alias: string) => {
     const label = alias.slice(1).trim() || target.trim()
 
-    return `${bang ? '↪ ' : ''}[${label}](#vault/${encodeURIComponent(target.trim())})`
+    return `${bang ? '↪ ' : ''}[${label}](#vault/${encodeURIComponent(target.trim() + heading.trim())})`
   })
+}
+
+/** `Note#Heading` / `Note#^block` → the note part and the anchor (without `#`). */
+export function parseLinkTarget(raw: string): { anchor: null | string; note: string } {
+  const at = raw.indexOf('#')
+
+  return at < 0
+    ? { anchor: null, note: raw.trim() }
+    : { anchor: raw.slice(at + 1).trim() || null, note: raw.slice(0, at).trim() }
+}
+
+const normalizeHeading = (value: string): string =>
+  value
+    .replace(/[*_`~[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+
+/** The 0-based line an anchor points at: a heading (`Intro`) or a block id (`^abc123`). -1 when absent. */
+export function findAnchorLine(text: string, anchor: string): number {
+  const lines = text.split('\n')
+
+  if (anchor.startsWith('^')) {
+    const id = anchor.slice(1).trim()
+
+    return lines.findIndex(line => new RegExp(`\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`).test(line))
+  }
+
+  const wanted = normalizeHeading(anchor)
+  let fence: null | string = null
+
+  return lines.findIndex(line => {
+    const open = /^\s*(```|~~~)/.exec(line)
+
+    if (fence) {
+      if (line.trimStart().startsWith(fence)) {
+        fence = null
+      }
+
+      return false
+    }
+
+    if (open) {
+      fence = open[1]!
+
+      return false
+    }
+
+    const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line)
+
+    return heading !== null && normalizeHeading(heading[1]!) === wanted
+  })
+}
+
+/** The part of a note an anchor names: a heading's section (up to the next heading of the same or a higher level) or one block line. */
+export function sectionOf(text: string, anchor: null | string): string {
+  if (!anchor) {
+    return text
+  }
+
+  const at = findAnchorLine(text, anchor)
+
+  if (at < 0) {
+    return text
+  }
+
+  const lines = text.split('\n')
+
+  if (anchor.startsWith('^')) {
+    return lines[at]!.replace(/\s*\^[\w-]+\s*$/, '')
+  }
+
+  const level = /^(#{1,6})/.exec(lines[at]!)![1]!.length
+  const end = lines.findIndex((line, index) => {
+    const next = /^(#{1,6})\s/.exec(line)
+
+    return index > at && next !== null && next[1]!.length <= level
+  })
+
+  return lines.slice(at, end < 0 ? undefined : end).join('\n')
+}
+
+// ---- images and embeds -------------------------------------------------------------------------
+
+export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i
+
+export const isImageName = (name: string): boolean => IMAGE_EXT.test(name.split('#')[0]!.trim())
+
+export type PreviewSegment =
+  | { kind: 'embed'; anchor: null | string; target: string }
+  | { alt: string; kind: 'image'; target: string; width: null | number }
+  | { kind: 'md'; text: string }
+
+const EMBED = /!\[\[([^\]|#\n]+)((?:#[^\]|\n]*)?)((?:\|[^\]\n]*)?)\]\]|!\[([^\]\n]*)\]\(([^)\n]+)\)/g
+const REMOTE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i
+
+/**
+ * Split note text into markdown runs and the pieces the preview renders itself: local images
+ * (`![[pic.png|300]]`, `![alt](img/pic.png)`) and note embeds (`![[Other note#Heading]]`).
+ * Remote/data image links and anything inside code stay in the markdown run.
+ */
+export function splitPreview(text: string): PreviewSegment[] {
+  const code = codeRanges(text)
+  const out: PreviewSegment[] = []
+  let cursor = 0
+
+  for (const match of text.matchAll(EMBED)) {
+    const start = match.index
+    const wiki = match[1] !== undefined
+    const target = (wiki ? match[1]! : decodeUri(match[5]!.trim().replace(/\s+"[^"]*"$/, ''))).trim()
+
+    if (inRanges(code, start) || (!wiki && (REMOTE.test(target) || !isImageName(target)))) {
+      continue
+    }
+
+    if (start > cursor) {
+      out.push({ kind: 'md', text: text.slice(cursor, start) })
+    }
+
+    if (wiki && !isImageName(target)) {
+      out.push({ anchor: match[2]!.slice(1).trim() || null, kind: 'embed', target })
+    } else {
+      const size = wiki ? Number(match[3]!.slice(1).split('x')[0]) : 0
+
+      out.push({
+        alt: wiki ? '' : match[4]!,
+        kind: 'image',
+        target,
+        width: Number.isFinite(size) && size > 0 ? size : null
+      })
+    }
+
+    cursor = start + match[0].length
+  }
+
+  if (cursor < text.length) {
+    out.push({ kind: 'md', text: text.slice(cursor) })
+  }
+
+  return out
+}
+
+function decodeUri(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * Resolve an image reference to a vault file. `target` may be a bare name (`pic.png`), a path tail
+ * (`img/pic.png`) or a path relative to the embedding note; the shallowest match wins.
+ */
+export function assetResolver(assets: readonly string[]): (target: string, fromRel?: null | string) => string | undefined {
+  const ordered = [...assets].sort((a, b) => a.split('/').length - b.split('/').length || a.length - b.length)
+
+  return (target, fromRel) => {
+    const wanted = normalizeSlashes(target).replace(/^\.\//, '').toLowerCase()
+
+    if (fromRel) {
+      const dir = parentDir(fromRel)
+      const relative = normalizeRelative(dir ? `${dir}/${wanted}` : wanted).toLowerCase()
+      const exact = ordered.find(rel => rel.toLowerCase() === relative)
+
+      if (exact) {
+        return exact
+      }
+    }
+
+    return ordered.find(rel => {
+      const lower = rel.toLowerCase()
+
+      return lower === wanted || lower.endsWith(`/${wanted}`)
+    })
+  }
+}
+
+function normalizeRelative(path: string): string {
+  const parts: string[] = []
+
+  for (const part of path.split('/')) {
+    if (part === '..') {
+      parts.pop()
+    } else if (part && part !== '.') {
+      parts.push(part)
+    }
+  }
+
+  return parts.join('/')
 }
 
 /** A name that is safe as a note file name on Windows and POSIX. */

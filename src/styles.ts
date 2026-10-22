@@ -121,7 +121,7 @@ export function installStyles(): () => void {
   const style = document.createElement('style')
 
   style.id = STYLE_ID
-  style.textContent = CSS + MD_CSS
+  style.textContent = CSS + MD_CSS + PREVIEW_CSS
   document.head.appendChild(style)
 
   return () => style.remove()
@@ -140,4 +140,15 @@ export const MD_CSS = `
 .vc-editor .cm-md-quote { color: var(--vc-dim); border-left: 2px solid var(--vc-line); }
 .vc-editor .cm-md-list { color: var(--vc-accent); }
 .vc-editor .cm-md-fm { color: var(--vc-dim); }
+`
+
+export const PREVIEW_CSS = `
+.vc-embed { margin: 8px 0; padding: 4px 10px; border-left: 2px solid var(--vc-line); background: rgba(128, 128, 128, 0.06); }
+.vc-embed .vc-preview { padding: 0; }
+.vc-embed-title { display: inline-block; padding: 0 4px; margin-left: -4px; color: var(--vc-dim); font-size: 0.75rem; }
+.vc-chip { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px;
+  border: 1px solid var(--ui-stroke-secondary, rgba(128, 128, 128, 0.35)); border-radius: 999px; cursor: pointer;
+  font-size: 0.85em; color: var(--ui-text-primary, inherit); }
+.vc-chip:hover { background: rgba(128, 128, 128, 0.14); }
+.vc-chip:focus-visible { outline: 1px solid var(--ui-accent, #4a9eff); }
 `

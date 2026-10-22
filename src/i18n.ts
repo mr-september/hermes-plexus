@@ -64,8 +64,20 @@ export const en = {
     showArchive: 'Show skipped folders',
     trash: 'Move to trash'
   },
-  vault: { open: 'Open Vault', title: 'Vault', touched: 'Recently changed by something else' },
+  vault: {
+    noteLink: (name: string) => `Open "${name}" in Vault`,
+    open: 'Open Vault',
+    title: 'Vault',
+    touched: 'Recently changed by something else'
+  },
+  preview: {
+    embedMissing: (name: string) => `Embedded note not found: ${name}`,
+    embedTooDeep: 'Embedded too deeply',
+    imageMissing: (name: string) => `Image not found: ${name}`,
+    openEmbedded: 'Open this note'
+  },
   warn: {
+    notFound: (name: string) => `Note not found: ${name}`,
     linksRewritten: (count: number, notes: number) => `Updated ${count} link(s) in ${notes} note(s).`,
     linksSkipped: (names: string) => `Could not update links in: ${names}`
   }

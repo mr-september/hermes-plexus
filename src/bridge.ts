@@ -25,6 +25,7 @@ export interface ReadFileError {
 
 export interface Bridge {
   readDir: (path: string) => Promise<{ entries: DirEntry[]; error?: string }>
+  readFileDataUrl?: (path: string) => Promise<ReadFileError | string>
   readFileText: (path: string) => Promise<ReadFileError | ReadFileResult>
   renamePath?: (path: string, newName: string) => Promise<{ path: string }>
   selectPaths?: (options?: { defaultPath?: string; directories?: boolean; title?: string }) => Promise<string[]>

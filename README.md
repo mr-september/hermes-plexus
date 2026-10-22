@@ -16,6 +16,18 @@ Open it from the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G** (rebin
 
 Open tabs, the active note, expanded folders, pinned nodes and graph layout are remembered per vault. A clean open note reloads itself when it changes on disk; if you have unsaved edits when that happens, saving is refused until you choose **Reload from disk** or **Overwrite**.
 
+**Links.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` open the note and jump to the heading or block (in the editor and in Preview). In Preview, `![[image.png|300]]` and `![alt](img/pic.png)` show vault images, and `![[Note]]` / `![[Note#Heading]]` embed that note or section.
+
+**From chat.** The plugin registers a transcript directive, so the agent can link a note in its reply and you can open it with one click:
+
+```
+::vault{note="Projects/Hermes setup#Install"}
+```
+
+The chip opens (or re-fronts) the Vault tab on that note. A name that does not exist is reported, never created. Hermes' agent only knows about the directive if you tell it; add something like this to a skill or `SOUL.md`:
+
+> When you mention a note from the user's Obsidian vault, link it with `::vault{note="<Folder/Note name>"}` (optionally `#Heading`) on its own line instead of pasting its path.
+
 Renaming or moving a note rewrites the links that pointed at it (aliases, headings and embeds preserved; links inside code are left alone). Notes with unsaved edits are skipped and reported.
 
 ## Install
@@ -42,10 +54,9 @@ npm run typecheck
 
 - No live file watching: the vault rescans when the window regains focus (full re-read up to 1,500 notes, folder listing only above that), after saves, and on the rescan button.
 - A save is check-then-write; the bridge has no compare-and-swap, so an edit made by another program in the few milliseconds between the check and the write can be lost.
-- Notes over the bridge's 512 KiB preview cap open read-only. Images, `![[embeds]]` rendering and heading/block-level links are not implemented (embeds count as links in the graph).
+- Notes over the bridge's 512 KiB preview cap open read-only. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
 - The editor's highlighting is regex-based, not a full markdown parser.
 - UI strings are English only; add a locale object in `src/i18n.ts`.
-- Opening vault notes from links inside chat is not possible with the current plugin SDK.
 - **Catalog admission:** the bundled CodeMirror (`@codemirror/language`, pulled in by `@codemirror/autocomplete`/`commands`) runs `Object.defineProperty(EditorState.prototype, "tree", …)` at load. That is the library extending its own class, but Hermes' static admission lint flags the pattern. It does not affect loading from disk.
 
 ## License

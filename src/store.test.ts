@@ -240,3 +240,51 @@ describe('persistence', () => {
     await again.dispose()
   })
 })
+
+describe('links with anchors, images and embeds', () => {
+  it('opens the note and records a jump for a heading link', async () => {
+    await ready()
+
+    expect(await store.follow('Concepts/Beta#Section One', 'Alpha.md')).toBe(true)
+    expect(store.get().active).toBe('Concepts/Beta.md')
+    expect(store.get().jump).toMatchObject({ anchor: 'Section One', rel: 'Concepts/Beta.md' })
+
+    store.clearJump()
+    expect(store.get().jump).toBeNull()
+  })
+
+  it('never creates a note for a link that comes from chat', async () => {
+    await ready()
+    const before = disk.writes.length
+
+    expect(await store.follow('Hallucinated Note', null, false)).toBe(false)
+    expect(disk.writes).toHaveLength(before)
+    expect(store.get().notice).toMatchObject({ kind: 'error', text: 'warn.notFound:Hallucinated Note' })
+  })
+
+  it('whenReady resolves after the first scan, and false when no vault is chosen', async () => {
+    const empty = new VaultStore(disk.bridge, new PrefsStore(storage()), key => key)
+
+    expect(await empty.whenReady()).toBe(false)
+
+    store.start()
+    expect(await store.whenReady()).toBe(true)
+  })
+
+  it('lists images, serves them as data URLs (cached), and reads embedded note text', async () => {
+    disk.images.set(disk.abs('img/pic.png'), 'data:image/png;base64,AAAA')
+    await ready()
+
+    expect(store.get().assets.map(a => a.rel)).toEqual(['img/pic.png'])
+
+    const read = vi.spyOn(disk.bridge, 'readFileDataUrl')
+
+    expect(await store.imageUrl('img/pic.png')).toBe('data:image/png;base64,AAAA')
+    expect(await store.imageUrl('img/pic.png')).toBe('data:image/png;base64,AAAA')
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(await store.imageUrl('img/none.png')).toBeNull()
+
+    expect(await store.noteText('Concepts/Gamma.md')).toBe('gamma')
+    expect(await store.noteText('Nope.md')).toBeNull()
+  })
+})

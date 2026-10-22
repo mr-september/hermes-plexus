@@ -6,9 +6,10 @@ import type { Bridge } from './bridge'
 import { FileTree } from './file-tree'
 import { GraphView } from './graph-view'
 import { PLUGIN_ID } from './i18n'
-import { backlinksOf, clampSplit, filterGraph, noteTitle } from './model'
+import { assetResolver, backlinksOf, clampSplit, filterGraph, linkResolver, noteTitle } from './model'
 import { NotePane } from './note-pane'
 import type { PrefsStore } from './prefs'
+import type { PreviewContext } from './preview'
 import type { VaultStore } from './store'
 import { chooseVaultFolder } from './vault-fs'
 
@@ -69,6 +70,20 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
   const legendFolders = useMemo(() => [...new Set(graph.nodes.map(node => node.folder))].sort(), [graph])
 
   const getTitles = useCallback(() => store.get().notes.map(note => noteTitle(note.rel)), [store])
+
+  const resolveAsset = useMemo(() => assetResolver(state.assets.map(asset => asset.rel)), [state.assets])
+  const resolveNote = useMemo(() => linkResolver(notes.map(note => note.rel)), [notes])
+
+  const previewCtx = useMemo<PreviewContext>(
+    () => ({
+      imageUrl: rel => store.imageUrl(rel),
+      noteText: rel => store.noteText(rel),
+      onFollow: (raw, from) => void store.follow(raw, from),
+      resolveAsset: (target, from) => resolveAsset(target, from),
+      resolveNote: target => resolveNote(target)
+    }),
+    [resolveAsset, resolveNote, store]
+  )
 
   const pickVault = async () => {
     const picked = await chooseVaultFolder(fs, root || undefined)
@@ -271,14 +286,17 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                   active={active}
                   backlinks={rel => backlinksOf(graph, rel)}
                   getTitles={getTitles}
+                  jump={state.jump}
                   notes={tabs}
                   onActivate={rel => store.activate(rel)}
                   onClose={rel => void store.close(rel)}
                   onEdit={(rel, text) => store.edit(rel, text)}
                   onFollow={(target, from) => void store.follow(target, from)}
+                  onJumped={() => store.clearJump()}
                   onOpenRel={openRel}
                   onReload={rel => store.reload(rel)}
                   onSave={(rel, force) => void store.save(rel, force)}
+                  preview={previewCtx}
                 />
               </div>
             </>

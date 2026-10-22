@@ -12,9 +12,10 @@ import {
 } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 
+import { findAnchorLine } from './model'
 import { computeMarks } from './md-highlight'
 
-const WIKILINK_AT = /\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g
+const WIKILINK_AT = /\[\[([^\]|#\n]+)((?:#[^\]|\n]*)?)(?:\|[^\]\n]*)?\]\]/g
 
 function decorate(doc: string): DecorationSet {
   const ranges: Range<Decoration>[] = computeMarks(doc).map(mark =>
@@ -43,11 +44,11 @@ const highlighter = ViewPlugin.fromClass(
   { decorations: plugin => plugin.decorations }
 )
 
-/** The wikilink target at `offset` within `lineText`, if the offset falls inside one. */
+/** The wikilink target (`Note` or `Note#anchor`) at `offset` within `lineText`, if the offset falls inside one. */
 export function wikilinkAt(lineText: string, offset: number): null | string {
   for (const match of lineText.matchAll(WIKILINK_AT)) {
     if (offset >= match.index && offset <= match.index + match[0].length) {
-      return match[1]!.trim()
+      return match[1]!.trim() + match[2]!.trim()
     }
   }
 
@@ -58,7 +59,11 @@ export interface EditorProps {
   /** Note titles offered after `[[`; read fresh on each completion. */
   getTitles: () => string[]
   initialValue: string
+  /** Scroll to a heading or block when `nonce` changes (a `Note#anchor` link was followed). */
+  jump?: null | { anchor: string; nonce: number }
   onChange: (text: string) => void
+  /** The pending jump has been attempted, so it must not repeat on a later remount. */
+  onJumped?: () => void
   /** Ctrl/⌘-click on a wikilink. */
   onFollow: (target: string) => void
   onSave: () => void
@@ -67,6 +72,7 @@ export interface EditorProps {
 /** CodeMirror 6 markdown editor. Reads `initialValue` once — remount (new `key`) to load another buffer. */
 export function Editor(props: EditorProps) {
   const host = useRef<HTMLDivElement | null>(null)
+  const viewRef = useRef<EditorView | null>(null)
   const latest = useRef(props)
 
   latest.current = props
@@ -138,8 +144,35 @@ export function Editor(props: EditorProps) {
       })
     })
 
-    return () => view.destroy()
+    viewRef.current = view
+
+    return () => {
+      viewRef.current = null
+      view.destroy()
+    }
   }, [])
+
+  const jumpNonce = props.jump?.nonce
+
+  useEffect(() => {
+    const view = viewRef.current
+    const anchor = latest.current.jump?.anchor
+
+    if (!view || !anchor) {
+      return
+    }
+
+    const line = findAnchorLine(view.state.doc.toString(), anchor)
+
+    if (line >= 0) {
+      const pos = view.state.doc.line(line + 1).from
+
+      view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 8 }), selection: { anchor: pos } })
+      view.focus()
+    }
+
+    latest.current.onJumped?.()
+  }, [jumpNonce])
 
   return <div className="vc-editor" ref={host} />
 }

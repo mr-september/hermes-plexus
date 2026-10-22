@@ -5,7 +5,7 @@
  */
 
 import type { Bridge } from './bridge'
-import { isValidNoteName, noteTitle, relativeTo, type VaultNote } from './model'
+import { IMAGE_EXT, isValidNoteName, noteTitle, relativeTo, type VaultNote } from './model'
 
 export type Fail = { error: string; ok: false }
 export type Result<T = object> = ({ ok: true } & T) | Fail
@@ -25,14 +25,15 @@ export const dirPath = (root: string, dirRel: string): string =>
 
 export const BAD_NAME = 'Names cannot be empty or contain \\ / : * ? " < > |'
 
-/** Every `.md` under `root`, skipping dot-folders and `hidden` folder names. */
+/** Every `.md` (and image, for previews) under `root`, skipping dot-folders and `hidden` folder names. */
 export async function scanVault(
   fs: Bridge,
   root: string,
   hidden: readonly string[]
-): Promise<Result<{ notes: VaultNote[] }>> {
+): Promise<Result<{ assets: VaultNote[]; notes: VaultNote[] }>> {
   const skip = new Set(hidden.map(name => name.toLowerCase()))
   const notes: VaultNote[] = []
+  const assets: VaultNote[] = []
   let failure: null | string = null
 
   const walk = async (dir: string): Promise<void> => {
@@ -53,11 +54,15 @@ export async function scanVault(
         if (!entry.name.startsWith('.') && !skip.has(entry.name.toLowerCase())) {
           subdirs.push(entry.path)
         }
-      } else if (/\.md$/i.test(entry.name)) {
-        const rel = relativeTo(root, entry.path)
+      } else {
+        const isNote = /\.md$/i.test(entry.name)
 
-        if (rel) {
-          notes.push({ path: entry.path, rel })
+        if (isNote || IMAGE_EXT.test(entry.name)) {
+          const rel = relativeTo(root, entry.path)
+
+          if (rel) {
+            ;(isNote ? notes : assets).push({ path: entry.path, rel })
+          }
         }
       }
     }
@@ -67,7 +72,9 @@ export async function scanVault(
 
   await walk(root)
 
-  return failure ? fail(failure) : { notes: notes.sort((a, b) => a.rel.localeCompare(b.rel)), ok: true }
+  const byRel = (a: VaultNote, b: VaultNote) => a.rel.localeCompare(b.rel)
+
+  return failure ? fail(failure) : { assets: assets.sort(byRel), notes: notes.sort(byRel), ok: true }
 }
 
 export interface NoteText {
@@ -182,6 +189,21 @@ export async function trashNote(fs: Bridge, path: string): Promise<Result> {
     await fs.trashPath!(path)
 
     return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** An image as a data URL, via the bridge's preview reader. */
+export async function readDataUrl(fs: Bridge, path: string): Promise<Result<{ url: string }>> {
+  try {
+    const res = await fs.readFileDataUrl?.(path)
+
+    if (res === undefined) {
+      return fail('Image preview needs a newer desktop app')
+    }
+
+    return typeof res === 'string' ? { ok: true, url: res } : fail(res.message || res.error)
   } catch (error) {
     return fail(error)
   }

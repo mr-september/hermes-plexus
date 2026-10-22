@@ -16,6 +16,7 @@ import {
   noteTitle,
   type NoteIndex,
   parentDir,
+  parseLinkTarget,
   retargetLinks,
   rewriteWikilinks,
   type VaultGraph,
@@ -27,6 +28,7 @@ import {
   createNote,
   dirPath,
   moveNote,
+  readDataUrl,
   readNote,
   renameNote,
   type Result,
@@ -61,7 +63,11 @@ export interface Notice {
 
 export interface StoreState {
   active: null | string
+  /** Image files in the vault, for previews. */
+  assets: VaultNote[]
   graph: VaultGraph
+  /** A pending "scroll to heading / block" for the note just opened from a `Note#anchor` link. */
+  jump: null | { anchor: string; nonce: number; rel: string }
   notes: VaultNote[]
   notice: null | Notice
   root: string
@@ -104,7 +110,9 @@ const withMd = (name: string): string => `${name.trim().replace(/\.md$/i, '')}.m
 export class VaultStore {
   private state: StoreState = {
     active: null,
+    assets: [],
     graph: EMPTY_GRAPH,
+    jump: null,
     notes: [],
     notice: null,
     root: '',
@@ -122,6 +130,9 @@ export class VaultStore {
   private persistTimer: ReturnType<typeof setTimeout> | undefined
   private loadedKey = ''
   private unsubscribe: (() => void) | undefined
+  private scanned = false
+  private waiting: ((ready: boolean) => void)[] = []
+  private imageCache = new Map<string, string>()
 
   constructor(
     private fs: Bridge,
@@ -188,9 +199,13 @@ export class VaultStore {
       await this.flushAll()
       this.cache.clear()
       this.ownWrites.clear()
+      this.imageCache.clear()
+      this.scanned = false
       this.patch({
         active: null,
+        assets: [],
         graph: EMPTY_GRAPH,
+        jump: null,
         notes: [],
         root: vaultRoot,
         tabs: [],
@@ -200,6 +215,8 @@ export class VaultStore {
     }
 
     if (!vaultRoot) {
+      this.settle(false)
+
       return
     }
 
@@ -208,6 +225,24 @@ export class VaultStore {
     if (rootChanged) {
       this.restoreTabs()
     }
+  }
+
+  private settle(ready: boolean): void {
+    this.scanned = ready || this.scanned
+    this.waiting.splice(0).forEach(resolve => resolve(ready))
+  }
+
+  /** Resolves once the vault has been scanned (true), or straight away with false when no vault is chosen. */
+  whenReady(): Promise<boolean> {
+    if (this.scanned) {
+      return Promise.resolve(true)
+    }
+
+    if (!this.prefs.get().vaultRoot) {
+      return Promise.resolve(false)
+    }
+
+    return new Promise(resolve => this.waiting.push(resolve))
   }
 
   private restoreTabs(): void {
@@ -247,6 +282,7 @@ export class VaultStore {
 
     if (!found.ok) {
       this.patch({ status: { error: found.error, loading: false } })
+      this.settle(false)
 
       return
     }
@@ -290,7 +326,14 @@ export class VaultStore {
       return
     }
 
-    this.patch({ graph: this.graphFor(found.notes), notes: found.notes, status: { loading: false }, touched })
+    this.patch({
+      assets: found.assets,
+      graph: this.graphFor(found.notes),
+      notes: found.notes,
+      status: { loading: false },
+      touched
+    })
+    this.settle(true)
 
     for (const [rel, text] of disk) {
       this.applyDisk(rel, text)
@@ -361,7 +404,7 @@ export class VaultStore {
     })
   }
 
-  open(rel: string): void {
+  open(rel: string, anchor?: null | string): void {
     const note = this.state.notes.find(item => item.rel === rel)
 
     if (!note) {
@@ -374,7 +417,55 @@ export class VaultStore {
       this.openTab(note)
     }
 
+    if (anchor) {
+      this.patch({ jump: { anchor, nonce: this.now(), rel } })
+    }
+
     this.persist()
+  }
+
+  clearJump(): void {
+    if (this.state.jump) {
+      this.patch({ jump: null })
+    }
+  }
+
+  /** The text of a note for embedding: the open draft if there is one, else the file on disk. */
+  async noteText(rel: string): Promise<null | string> {
+    const tab = this.state.tabs.find(item => item.rel === rel)
+
+    if (tab && tab.status === 'ready') {
+      return tab.draft
+    }
+
+    const note = this.state.notes.find(item => item.rel === rel)
+    const res = note ? await readNote(this.fs, note.path) : null
+
+    return res?.ok ? res.text : null
+  }
+
+  /** A vault image as a data URL (cached; the cache is small and per vault). */
+  async imageUrl(rel: string): Promise<null | string> {
+    const cached = this.imageCache.get(rel)
+
+    if (cached) {
+      return cached
+    }
+
+    const asset = this.state.assets.find(item => item.rel === rel)
+    const res = asset ? await readDataUrl(this.fs, asset.path) : null
+
+    if (!res?.ok) {
+      return null
+    }
+
+    if (this.imageCache.size >= 40) {
+      this.imageCache.delete(this.imageCache.keys().next().value!)
+    }
+
+    this.imageCache.set(rel, res.url)
+
+    return res.url
   }
 
   activate(rel: null | string): void {
@@ -682,14 +773,25 @@ export class VaultStore {
     return { ok: true }
   }
 
-  /** Follow a wikilink: open the note it names, or create it next to `fromRel` when it does not exist yet. */
-  async follow(target: string, fromRel: null | string): Promise<void> {
+  /**
+   * Follow a wikilink (`Note`, `Note#Heading`, `Note#^block`): open the note and jump to the anchor.
+   * A note that does not exist yet is created next to `fromRel` when `create` is set (a click on a
+   * dangling link); otherwise the miss is reported — links that come from chat must never create files.
+   */
+  async follow(raw: string, fromRel: null | string, create = true): Promise<boolean> {
+    const { anchor, note: target } = parseLinkTarget(raw)
     const resolved = linkResolver(this.state.notes.map(note => note.rel))(target)
 
     if (resolved) {
-      this.open(resolved)
+      this.open(resolved, anchor)
 
-      return
+      return true
+    }
+
+    if (!create) {
+      this.notify('error', this.t('warn.notFound', target))
+
+      return false
     }
 
     const name = target.split('/').pop()!.replace(/\.md$/i, '').trim()
@@ -698,6 +800,8 @@ export class VaultStore {
     if (!res.ok) {
       this.notify('error', res.error)
     }
+
+    return res.ok
   }
 
   // ---- per-vault view state --------------------------------------------------------------------

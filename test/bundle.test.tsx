@@ -2,7 +2,7 @@
  * Smoke-tests the SHIPPED file (dist/plugin.js), not the sources: it must evaluate with only the
  * SDK and React external, default-export a plugin, and register + open through the SDK surface.
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { host } from '@hermes/plugin-sdk'
@@ -65,7 +65,11 @@ describe('dist/plugin.js', () => {
 
     plugin.register(ctx)
 
-    expect(registered.map(r => `${r.area}:${r.id}`).sort()).toEqual(['keybinds:open', 'palette:open'])
+    expect(registered.map(r => `${r.area}:${r.id}`).sort()).toEqual([
+      'keybinds:open',
+      'palette:open',
+      'transcript.directives:note-link'
+    ])
     expect(registered.find(r => r.area === 'keybinds')?.data?.defaults).toEqual(['mod+shift+g'])
     expect(document.getElementById('vault-constellation-styles')).not.toBeNull()
     expect(ctx.registerSettingsPage).toHaveBeenCalledOnce()
@@ -83,6 +87,30 @@ describe('dist/plugin.js', () => {
 
     disposers.forEach(dispose => dispose())
     expect(document.getElementById('vault-constellation-styles')).toBeNull()
+  })
+
+  it('renders a chat chip for ::vault{note="…"} that opens the tab, and leaves odd attributes as text', () => {
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = new FakeDisk('C:\\v', {}).bridge
+
+    const open = vi.spyOn(host, 'openWorkspace')
+    const { ctx, registered } = makeCtx()
+
+    plugin.register(ctx)
+
+    const directive = registered.find(r => r.area === 'transcript.directives')!.data as unknown as {
+      name: string
+      render: (props: { attrs: Record<string, string>; source: string; streaming: boolean }) => React.ReactNode
+    }
+
+    expect(directive.name).toBe('vault')
+
+    render(<>{directive.render({ attrs: { note: 'Projects/Foo#Intro' }, source: '::vault{...}', streaming: false })}</>)
+    fireEvent.click(screen.getByRole('button', { name: /Foo › Intro/ }))
+    expect(open).toHaveBeenCalledOnce()
+
+    cleanup()
+    render(<>{directive.render({ attrs: { note: 'bad\u0000name' }, source: '::vault{note="x"}', streaming: false })}</>)
+    expect(screen.getByText('::vault{note="x"}')).toBeTruthy()
   })
 
   it('does nothing without the Electron file bridge', () => {

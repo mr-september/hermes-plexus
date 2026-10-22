@@ -3,6 +3,8 @@ import type { Bridge } from '../src/bridge'
 /** An in-memory disk behind the Electron file bridge's interface, with Windows-style paths. */
 export class FakeDisk {
   files = new Map<string, string>()
+  /** Image files by absolute path → their data URL. */
+  images = new Map<string, string>()
   trashed: string[] = []
   readDirCalls: string[] = []
   writes: [string, string][] = []
@@ -27,7 +29,7 @@ export class FakeDisk {
       const prefix = `${dir}\\`
       const seen = new Map<string, boolean>()
 
-      for (const path of this.files.keys()) {
+      for (const path of [...this.files.keys(), ...this.images.keys()]) {
         if (path.startsWith(prefix)) {
           const rest = path.slice(prefix.length)
           const [head] = rest.split('\\')
@@ -44,6 +46,10 @@ export class FakeDisk {
       this.files.has(path)
         ? { path, text: this.files.get(path)! }
         : { error: 'ENOENT', message: 'missing', ok: false, path },
+    readFileDataUrl: async path =>
+      this.images.has(path)
+        ? this.images.get(path)!
+        : { error: 'ENOENT', message: 'missing image', ok: false, path },
     renamePath: async (path, name) => {
       const next = path.replace(/[^\\]+$/, name)
 

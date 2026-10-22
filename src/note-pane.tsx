@@ -1,24 +1,29 @@
 import { useState } from 'react'
 
-import { Codicon, host, Streamdown, usePluginI18n } from '@hermes/plugin-sdk'
+import { Codicon, host, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { Editor } from './editor'
 import { PLUGIN_ID } from './i18n'
-import { noteTitle, stripFrontmatter, wikilinksToMarkdown } from './model'
+import { noteTitle } from './model'
+import { NotePreview, type PreviewContext } from './preview'
 import type { OpenNote } from './store'
 
 export interface NotePaneProps {
   active: null | string
   backlinks: (rel: string) => string[]
   getTitles: () => string[]
+  /** A pending jump to a heading/block in the note it names. */
+  jump: null | { anchor: string; nonce: number; rel: string }
   notes: readonly OpenNote[]
   onActivate: (rel: string) => void
   onClose: (rel: string) => void
   onEdit: (rel: string, text: string) => void
   onFollow: (target: string, fromRel: string) => void
+  onJumped: () => void
   onOpenRel: (rel: string) => void
   onReload: (rel: string) => void
   onSave: (rel: string, force?: boolean) => void
+  preview: PreviewContext
 }
 
 export function NotePane(props: NotePaneProps) {
@@ -26,6 +31,7 @@ export function NotePane(props: NotePaneProps) {
   const t = usePluginI18n(PLUGIN_ID)
   const [preview, setPreview] = useState<ReadonlySet<string>>(new Set())
   const note = notes.find(item => item.rel === active)
+  const jump = props.jump && props.jump.rel === active ? props.jump : null
 
   const togglePreview = (rel: string) => {
     const next = new Set(preview)
@@ -97,24 +103,21 @@ export function NotePane(props: NotePaneProps) {
             {note.status === 'loading' ? (
               <div className="vc-banner vc-dim">{t('note.loading')}</div>
             ) : preview.has(note.rel) || !note.editable ? (
-              <div
-                className="vc-preview"
-                onClick={event => {
-                  const href = (event.target as HTMLElement).closest('a')?.getAttribute('href') ?? ''
-
-                  if (href.startsWith('#vault/')) {
-                    event.preventDefault()
-                    props.onFollow(decodeURIComponent(href.slice(7)), note.rel)
-                  }
-                }}
-              >
-                <Streamdown>{wikilinksToMarkdown(stripFrontmatter(note.draft))}</Streamdown>
-              </div>
+              <NotePreview
+                anchor={jump?.anchor}
+                ctx={props.preview}
+                jumpNonce={jump?.nonce}
+                onJumped={props.onJumped}
+                rel={note.rel}
+                text={note.draft}
+              />
             ) : (
               <Editor
                 getTitles={props.getTitles}
                 initialValue={note.draft}
+                jump={jump}
                 key={`${note.rel}:${note.generation}`}
+                onJumped={props.onJumped}
                 onChange={text => props.onEdit(note.rel, text)}
                 onFollow={target => props.onFollow(target, note.rel)}
                 onSave={() => props.onSave(note.rel)}

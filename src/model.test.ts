@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  assetResolver,
   backlinksOf,
   buildGraph,
   clampSplit,
   extractTags,
   extractWikilinks,
   filterGraph,
+  findAnchorLine,
   indexNote,
   isValidNoteName,
   linkResolver,
   matchesSearch,
   neighborhood,
+  parseLinkTarget,
   relativeTo,
   retargetLinks,
   rewriteWikilinks,
+  sectionOf,
+  splitPreview,
   stripFrontmatter,
   wikilinksToMarkdown
 } from './model'
@@ -181,8 +186,8 @@ describe('view helpers', () => {
   })
 
   it('turns wikilinks into interceptable markdown links, honouring aliases', () => {
-    expect(wikilinksToMarkdown('go [[Foo Bar|there]] or [[Baz]]')).toBe(
-      'go [there](#vault/Foo%20Bar) or [Baz](#vault/Baz)'
+    expect(wikilinksToMarkdown('go [[Foo Bar|there]] or [[Baz]] or [[Qux#Sec 1]]')).toBe(
+      'go [there](#vault/Foo%20Bar) or [Baz](#vault/Baz) or [Qux](#vault/Qux%23Sec%201)'
     )
   })
 
@@ -192,5 +197,76 @@ describe('view helpers', () => {
     expect(isValidNoteName('  ')).toBe(false)
     expect(isValidNoteName('..')).toBe(false)
     expect(isValidNoteName('a:b')).toBe(false)
+  })
+})
+
+describe('anchors', () => {
+  it('splits a link target into note and anchor', () => {
+    expect(parseLinkTarget('Note')).toEqual({ anchor: null, note: 'Note' })
+    expect(parseLinkTarget('A/Note#Some Heading')).toEqual({ anchor: 'Some Heading', note: 'A/Note' })
+    expect(parseLinkTarget('Note#^abc')).toEqual({ anchor: '^abc', note: 'Note' })
+    expect(parseLinkTarget('Note#')).toEqual({ anchor: null, note: 'Note' })
+  })
+
+  it('finds headings (case-insensitive, formatting-insensitive, outside code) and block ids', () => {
+    const text = '# Top\n```\n# Hidden\n```\n## **Second** part ##\npara ^blk1\n'
+
+    expect(findAnchorLine(text, 'top')).toBe(0)
+    expect(findAnchorLine(text, 'Hidden')).toBe(-1)
+    expect(findAnchorLine(text, 'second part')).toBe(4)
+    expect(findAnchorLine(text, '^blk1')).toBe(5)
+    expect(findAnchorLine(text, '^nope')).toBe(-1)
+  })
+})
+
+describe('splitPreview', () => {
+  it('pulls out local images and note embeds, keeping the markdown around them', () => {
+    const text = 'a ![[pic.png|300]] b ![alt](img/p%20q.jpg) c ![[Other#Sec]] d ![r](https://x/y.png) e'
+
+    expect(splitPreview(text)).toEqual([
+      { kind: 'md', text: 'a ' },
+      { alt: '', kind: 'image', target: 'pic.png', width: 300 },
+      { kind: 'md', text: ' b ' },
+      { alt: 'alt', kind: 'image', target: 'img/p q.jpg', width: null },
+      { kind: 'md', text: ' c ' },
+      { anchor: 'Sec', kind: 'embed', target: 'Other' },
+      { kind: 'md', text: ' d ![r](https://x/y.png) e' }
+    ])
+  })
+
+  it('leaves code alone and returns a single run when nothing matches', () => {
+    expect(splitPreview('`![[pic.png]]` text')).toEqual([{ kind: 'md', text: '`![[pic.png]]` text' }])
+    expect(splitPreview('plain')).toEqual([{ kind: 'md', text: 'plain' }])
+  })
+})
+
+describe('assetResolver', () => {
+  const resolve = assetResolver(['img/a.png', 'Notes/img/a.png', 'Notes/b.JPG', 'c.svg'])
+
+  it('prefers the file relative to the embedding note, then the shallowest tail match', () => {
+    expect(resolve('img/a.png', 'Notes/x.md')).toBe('Notes/img/a.png')
+    expect(resolve('img/a.png')).toBe('img/a.png')
+    expect(resolve('a.png', 'Other/x.md')).toBe('img/a.png')
+    expect(resolve('../c.svg', 'Notes/x.md')).toBe('c.svg')
+    expect(resolve('b.jpg')).toBe('Notes/b.JPG')
+    expect(resolve('missing.png')).toBeUndefined()
+  })
+})
+
+describe('sectionOf', () => {
+  const text = '# A\nintro\n## B\nb1\n### C\nc1\n## D\nd1 ^blk\n'
+
+  it('returns the whole text without an anchor or when the anchor is missing', () => {
+    expect(sectionOf(text, null)).toBe(text)
+    expect(sectionOf(text, 'Nope')).toBe(text)
+  })
+
+  it('returns a heading section up to the next heading of the same or higher level', () => {
+    expect(sectionOf(text, 'B')).toBe('## B\nb1\n### C\nc1')
+    expect(sectionOf(text, 'D')).toBe('## D\nd1 ^blk\n')
+  })
+
+  it('returns just the block line, without its id', () => {
+    expect(sectionOf(text, '^blk')).toBe('d1')
   })
 })
