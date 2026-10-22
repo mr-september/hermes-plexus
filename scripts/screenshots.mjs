@@ -2,7 +2,7 @@
 // writes docs/screenshots/*.png. Only the host app around the plugin (SDK, theme tokens, markdown
 // renderer) is simulated, so these are representative, not literal Hermes Desktop captures.
 //
-//   node scripts/screenshots.mjs [scene …]      scenes: graph note preview search local light
+//   node scripts/screenshots.mjs [scene …]      scenes: graph note preview search local (each in dark and light)
 import { build } from 'esbuild'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -18,12 +18,13 @@ const work = join(tmpdir(), 'plexus-harness')
 
 const SCENES = {
   graph: 'overview',
-  light: 'light',
   local: 'local-graph',
   note: 'editor',
   preview: 'preview',
   search: 'search'
 }
+
+const THEMES = ['dark', 'light']
 
 const browser = [
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -107,7 +108,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const WIDTH = 1400
 const HEIGHT = 880
 
-async function capture(scene, file) {
+async function capture(scene, theme, file) {
   const profile = mkdtempSync(join(tmpdir(), 'plexus-shot-'))
 
   const child = spawn(
@@ -167,7 +168,7 @@ async function capture(scene, file) {
 
     await send('Page.enable')
     await send('Emulation.setDeviceMetricsOverride', { deviceScaleFactor: 1.5, height: HEIGHT, mobile: false, width: WIDTH })
-    await send('Page.navigate', { url: `${pathToFileURL(join(work, 'harness.html')).href}#scene=${scene}` })
+    await send('Page.navigate', { url: `${pathToFileURL(join(work, 'harness.html')).href}#scene=${scene}&theme=${theme}` })
 
     let ready = false
 
@@ -203,8 +204,10 @@ mkdirSync(outDir, { recursive: true })
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(SCENES)
 
 for (const scene of wanted) {
-  const file = join(outDir, `${SCENES[scene]}.png`)
-  const ready = await capture(scene, file)
+  for (const theme of THEMES) {
+    const file = join(outDir, `${SCENES[scene]}-${theme}.png`)
+    const ready = await capture(scene, theme, file)
 
-  console.log(`${scene}: ${file}${ready ? '' : '  (page never reported ready)'}`)
+    console.log(`${scene}/${theme}: ${file}${ready ? '' : '  (page never reported ready)'}`)
+  }
 }

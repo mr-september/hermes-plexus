@@ -11,9 +11,10 @@ import { translate } from './sdk'
 import vault from 'plexus-demo-vault'
 
 const ROOT = 'C:\\demo\\tidal-garden-vault'
-const scene = new URLSearchParams(location.hash.slice(1)).get('scene') ?? 'graph'
+const params = new URLSearchParams(location.hash.slice(1))
+const scene = params.get('scene') ?? 'graph'
 
-document.documentElement.dataset.theme = scene === 'light' ? 'light' : 'dark'
+document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 installStyles()
 
 const disk = new FakeDisk(ROOT, vault.files)
@@ -38,7 +39,6 @@ prefs.useVault(ROOT)
 // Pre-seed per-vault view state so the scene starts the way the screenshot needs.
 const open: Record<string, string[]> = {
   graph: [],
-  light: ['Projects/Tidal Garden.md', 'Research/H1 Predator removal.md'],
   local: ['Concepts/Food web.md'],
   note: ['Projects/Tidal Garden.md', 'Research/H1 Predator removal.md'],
   preview: ['Projects/Field Season 2026.md'],
