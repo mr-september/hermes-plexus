@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # Rebuilds desktop/plugin.js first, then unit, component and bundle smoke tests.
+      - run: npm test
+
+      # The committed bundle is what Hermes installs; it must match the sources.
+      - name: Committed bundle is up to date
+        run: git diff --exit-code -- desktop/plugin.js
+
+      # Hermes' own static admission lint for Desktop plugins, fetched from upstream so it cannot drift.
+      - name: Desktop-surface admission lint
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            -o /tmp/plugin_validate_desktop.py \
+            https://raw.githubusercontent.com/NousResearch/hermes-agent/main/hermes_cli/plugin_validate_desktop.py
+          python3 - <<'PY'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("lint", "/tmp/plugin_validate_desktop.py")
+          lint = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(lint)
+          findings = lint.desktop_surface_findings(open("desktop/plugin.js", encoding="utf8").read())
+          print("findings:", findings)
+          sys.exit(1 if findings else 0)
+          PY

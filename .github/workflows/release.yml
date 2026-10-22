@@ -1,0 +1,42 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish a GitHub release with the built plugin attached.
+# (Hermes' catalog installs by pinned commit, not by release; this is for manual installs.)
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Tag matches package.json and plugin.yaml
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "v$version" = "$GITHUB_REF_NAME"
+          grep -qE "^version: $version\$" plugin.yaml
+
+      - name: Committed bundle is up to date
+        run: git diff --exit-code -- desktop/plugin.js
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp desktop/plugin.js "hermes-plexus-$GITHUB_REF_NAME.js"
+          gh release create "$GITHUB_REF_NAME" "hermes-plexus-$GITHUB_REF_NAME.js" \
+            --title "Plexus $GITHUB_REF_NAME" --generate-notes

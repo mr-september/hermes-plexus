@@ -10,6 +10,7 @@
 
 import * as sdk from '@hermes/plugin-sdk'
 import {
+  Codicon,
   type HermesPlugin,
   host,
   type KeybindContribution,
@@ -154,6 +155,27 @@ const plugin: HermesPlugin = {
           }
         } as never,
         id: 'note-link'
+      })
+    }
+
+    // A status-bar button is the discoverable way in (the "+" on the tab strip has no extension point).
+    // `toggleLabel` lists it in the bar's own right-click show/hide menu, so it can be turned off.
+    const statusArea = (sdk as { STATUSBAR_AREAS?: { right?: string } }).STATUSBAR_AREAS?.right
+
+    if (statusArea) {
+      contributions.push({
+        area: statusArea,
+        data: {
+          actionId: 'hermes-plexus.open',
+          icon: <Codicon name="type-hierarchy" size="0.8125rem" />,
+          id: 'hermes-plexus',
+          label: ctx.i18n.t('vault.title'),
+          onSelect: () => void open(),
+          title: ctx.i18n.t('vault.open'),
+          toggleLabel: ctx.i18n.t('vault.statusbarToggle'),
+          variant: 'action'
+        } as never,
+        id: 'statusbar'
       })
     }
 

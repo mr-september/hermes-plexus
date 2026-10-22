@@ -68,6 +68,7 @@ describe('desktop/plugin.js', () => {
     expect(registered.map(r => `${r.area}:${r.id}`).sort()).toEqual([
       'keybinds:open',
       'palette:open',
+      'statusBar.right:statusbar',
       'transcript.directives:note-link'
     ])
     expect(registered.find(r => r.area === 'keybinds')?.data?.defaults).toEqual(['mod+shift+g'])
@@ -87,6 +88,26 @@ describe('desktop/plugin.js', () => {
 
     disposers.forEach(dispose => dispose())
     expect(document.getElementById('hermes-plexus-styles')).toBeNull()
+  })
+
+  it('adds a status-bar button that opens the tab and is listed in the bar show/hide menu', () => {
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = new FakeDisk('C:\\v', {}).bridge
+
+    const open = vi.spyOn(host, 'openWorkspace')
+    const { ctx, registered } = makeCtx()
+
+    plugin.register(ctx)
+
+    const item = registered.find(r => r.area === 'statusBar.right')!.data as unknown as {
+      actionId: string
+      onSelect: () => void
+      toggleLabel: string
+      variant: string
+    }
+
+    expect(item).toMatchObject({ actionId: 'hermes-plexus.open', toggleLabel: 'vault.statusbarToggle', variant: 'action' })
+    item.onSelect()
+    expect(open).toHaveBeenCalledOnce()
   })
 
   it('renders a chat chip for ::vault{note="…"} that opens the tab, and leaves odd attributes as text', () => {

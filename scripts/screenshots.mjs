@@ -105,10 +105,11 @@ writeFileSync(
 // document.title to "ready" once the layout has settled, then we take the screenshot. (The CLI's
 // --screenshot with a virtual-time budget occasionally caught the canvas mid-resize, i.e. blank.)
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-const WIDTH = 1400
-const HEIGHT = 880
+const DEFAULT_SIZE = { height: 880, scale: 1.5, width: 1400 }
 
-async function capture(scene, theme, file) {
+async function capture(scene, theme, file, { extra = '', size = DEFAULT_SIZE } = {}) {
+  const { height, scale, width } = size
+
   const profile = mkdtempSync(join(tmpdir(), 'plexus-shot-'))
 
   const child = spawn(
@@ -120,7 +121,7 @@ async function capture(scene, theme, file) {
       '--no-first-run',
       '--remote-debugging-port=0',
       `--user-data-dir=${profile}`,
-      `--window-size=${WIDTH},${HEIGHT}`,
+      `--window-size=${width},${height}`,
       'about:blank'
     ],
     { stdio: 'ignore' }
@@ -167,8 +168,8 @@ async function capture(scene, theme, file) {
       })
 
     await send('Page.enable')
-    await send('Emulation.setDeviceMetricsOverride', { deviceScaleFactor: 1.5, height: HEIGHT, mobile: false, width: WIDTH })
-    await send('Page.navigate', { url: `${pathToFileURL(join(work, 'harness.html')).href}#scene=${scene}&theme=${theme}` })
+    await send('Emulation.setDeviceMetricsOverride', { deviceScaleFactor: scale, height, mobile: false, width })
+    await send('Page.navigate', { url: `${pathToFileURL(join(work, 'harness.html')).href}#scene=${scene}&theme=${theme}${extra}` })
 
     let ready = false
 
@@ -201,7 +202,7 @@ async function capture(scene, theme, file) {
 
 mkdirSync(outDir, { recursive: true })
 
-const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(SCENES)
+const wanted = (process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(SCENES)).filter(name => name in SCENES)
 
 for (const scene of wanted) {
   for (const theme of THEMES) {
@@ -210,4 +211,12 @@ for (const scene of wanted) {
 
     console.log(`${scene}/${theme}: ${file}${ready ? '' : '  (page never reported ready)'}`)
   }
+}
+
+// The 2:1 card image the plugin catalog asks for (graph only, tree folded away).
+if (!process.argv.slice(2).length || process.argv.includes('banner')) {
+  const file = join(root, 'docs', 'banner.png')
+  const ready = await capture('graph', 'dark', file, { extra: '&tree=0', size: { height: 600, scale: 2, width: 1200 } })
+
+  console.log(`banner: ${file}${ready ? '' : '  (page never reported ready)'}`)
 }

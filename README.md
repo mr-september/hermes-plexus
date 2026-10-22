@@ -78,7 +78,7 @@ These are rendered from the **fictional demo vault** in `demo/vault` (a made-up 
 
 ## Use it from Hermes
 
-Open it from the command palette (**Open Vault**) or press **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). The first time, choose the folder that holds your notes. Settings are under **Settings → Plugins → Plexus**.
+Open it from the **Vault** button in the status bar (right-click the bar to hide it), the command palette (**Open Vault**), or **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). The first time, choose the folder that holds your notes. Settings are under **Settings → Plugins → Plexus**.
 
 **Link notes from chat.** The plugin registers a transcript directive, so the agent can point at a note and you open it with one click:
 

@@ -33,7 +33,7 @@ const storage = {
 
 const prefs = new PrefsStore(storage)
 
-prefs.set({ noteFrac: scene === 'graph' ? 0.5 : 0.44 })
+prefs.set({ noteFrac: scene === 'graph' ? 0.5 : 0.44, treeOpen: params.get('tree') !== '0' })
 prefs.useVault(ROOT)
 
 // Pre-seed per-vault view state so the scene starts the way the screenshot needs.

@@ -11,6 +11,7 @@ import { en } from '../../src/i18n'
 export const PALETTE_AREA = 'palette'
 export const KEYBINDS_AREA = 'keybinds'
 export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directives'
+export const STATUSBAR_AREAS = { left: 'statusBar.left', right: 'statusBar.right' }
 
 function lookup(key: string): unknown {
   return key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en)

@@ -67,6 +67,7 @@ export const en = {
   vault: {
     noteLink: (name: string) => `Open "${name}" in Vault`,
     open: 'Open Vault',
+    statusbarToggle: 'Vault button',
     title: 'Vault',
     touched: 'Recently changed by something else'
   },

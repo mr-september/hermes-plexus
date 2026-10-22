@@ -1,6 +1,7 @@
 // src/plugin.tsx
 import * as sdk from "@hermes/plugin-sdk";
 import {
+  Codicon as Codicon5,
   host as host2,
   KEYBINDS_AREA,
   PALETTE_AREA
@@ -74,6 +75,7 @@ var en = {
   vault: {
     noteLink: (name2) => `Open "${name2}" in Vault`,
     open: "Open Vault",
+    statusbarToggle: "Vault button",
     title: "Vault",
     touched: "Recently changed by something else"
   },
@@ -22300,6 +22302,23 @@ var plugin = {
           }
         },
         id: "note-link"
+      });
+    }
+    const statusArea = sdk.STATUSBAR_AREAS?.right;
+    if (statusArea) {
+      contributions.push({
+        area: statusArea,
+        data: {
+          actionId: "hermes-plexus.open",
+          icon: /* @__PURE__ */ jsx8(Codicon5, { name: "type-hierarchy", size: "0.8125rem" }),
+          id: "hermes-plexus",
+          label: ctx.i18n.t("vault.title"),
+          onSelect: () => void open(),
+          title: ctx.i18n.t("vault.open"),
+          toggleLabel: ctx.i18n.t("vault.statusbarToggle"),
+          variant: "action"
+        },
+        id: "statusbar"
       });
     }
     ctx.registerMany(contributions);

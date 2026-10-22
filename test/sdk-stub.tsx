@@ -33,3 +33,4 @@ export function Streamdown({ children }: { children?: string }): ReactNode {
 }
 
 export const TRANSCRIPT_DIRECTIVE_AREA = 'transcript.directives'
+export const STATUSBAR_AREAS = { left: 'statusBar.left', right: 'statusBar.right' }
