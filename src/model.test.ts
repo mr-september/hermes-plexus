@@ -9,6 +9,7 @@ import {
   extractWikilinks,
   filterGraph,
   findAnchorLine,
+  folderHues,
   indexNote,
   isValidNoteName,
   linkResolver,
@@ -268,5 +269,15 @@ describe('sectionOf', () => {
 
   it('returns just the block line, without its id', () => {
     expect(sectionOf(text, '^blk')).toBe('d1')
+  })
+})
+
+describe('folderHues', () => {
+  it('spreads hues evenly over the sorted folders so neighbours are far apart', () => {
+    const hues = folderHues(['b', '', 'a', 'c'])
+
+    expect([...hues.keys()]).toEqual(['', 'a', 'b', 'c'])
+    expect([...hues.values()]).toEqual([205, 295, 25, 115])
+    expect(new Set(hues.values()).size).toBe(4)
   })
 })

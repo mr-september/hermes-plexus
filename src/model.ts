@@ -357,15 +357,13 @@ export function clampSplit(fraction: number): number {
   return fraction >= 0.98 ? 1 : fraction
 }
 
-/** Stable hue (0–359) per key, for cluster colouring. */
-export function folderHue(key: string): number {
-  let hash = 0
+/** Evenly spaced hues (0–359), one per folder in sorted order, so legend neighbours never look alike. */
+export function folderHues(folders: readonly string[]): Map<string, number> {
+  const sorted = [...folders].sort()
 
-  for (const char of key) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  }
-
-  return hash % 360
+  return new Map(
+    sorted.map((folder, index) => [folder, Math.round((205 + (index * 360) / Math.max(sorted.length, 1)) % 360)])
+  )
 }
 
 /** Wikilinks → markdown links the preview can intercept (`#vault/<target[#anchor]>`). */

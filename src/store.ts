@@ -838,7 +838,8 @@ export class VaultStore {
     })
   }
 
+  /** Remember settled node positions; merged, so a local graph does not erase the rest of the layout. */
   setPositions(positions: Record<string, [number, number]>): void {
-    this.updateVault({ positions })
+    this.updateVault({ positions: { ...this.state.vault.positions, ...positions } })
   }
 }

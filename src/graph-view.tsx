@@ -1,5 +1,4 @@
 import {
-  forceCenter,
   forceCollide,
   forceLink,
   forceManyBody,
@@ -15,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { PLUGIN_ID } from './i18n'
-import { folderHue, type GraphNode, matchesSearch, type VaultGraph } from './model'
+import { folderHues, type GraphNode, matchesSearch, type VaultGraph } from './model'
 import type { ClusterMode, LabelMode } from './prefs'
 
 interface SimNode extends GraphNode, SimulationNodeDatum {
@@ -36,11 +35,11 @@ const TOUCHED_MS = 10 * 60 * 1000
 
 const radiusOf = (node: GraphNode): number => 3 + Math.sqrt(node.degree) * 1.7
 
-const hsl = (folder: string, lightness: number): string => `hsl(${folderHue(folder)} 62% ${lightness}%)`
+const hsl = (hue: number, lightness: number): string => `hsl(${hue} 62% ${lightness}%)`
 
 /** One anchor per folder, spread on a ring, so folders pull into clusters. */
 function folderAnchors(folders: readonly string[], mode: ClusterMode): Map<string, { x: number; y: number }> {
-  const ring = mode === 'none' ? 0 : 90 + folders.length * 22
+  const ring = mode === 'none' ? 0 : 170 + folders.length * 30
 
   return new Map(
     folders.map((folder, index) => {
@@ -86,6 +85,7 @@ export function GraphView(props: GraphViewProps) {
   const cursorRef = useRef<null | string>(null)
   const frameRef = useRef(0)
   const fittedRef = useRef(false)
+  const refitRef = useRef(false)
   const [pointer, setPointer] = useState(false)
 
   // The draw routine and event handlers read the freshest props through this ref.
@@ -94,6 +94,15 @@ export function GraphView(props: GraphViewProps) {
   live.current = props
 
   const folders = useMemo(() => [...new Set(graph.nodes.map(node => node.folder))].sort(), [graph])
+
+  // Hues are spread evenly over the vault's whole folder list (not just what is shown), so a
+  // folder keeps its colour while others are toggled off. With clustering off everything is one colour.
+  const hues = useMemo(() => folderHues(legendFolders), [legendFolders])
+  const huesRef = useRef(hues)
+
+  huesRef.current = hues
+
+  const colorOf = (folder: string): number => (cluster === 'none' ? 210 : (huesRef.current.get(folder) ?? 210))
 
   const paint = () => {
     const canvas = canvasRef.current
@@ -160,7 +169,7 @@ export function GraphView(props: GraphViewProps) {
       const r = radiusOf(node)
 
       ctx.globalAlpha = dim ? 0.16 : 1
-      ctx.fillStyle = cluster === 'none' ? hsl('', 58) : hsl(node.folder, 58)
+      ctx.fillStyle = hsl(colorOf(node.folder), 58)
       ctx.beginPath()
       ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
       ctx.fill()
@@ -194,24 +203,50 @@ export function GraphView(props: GraphViewProps) {
       }
     }
 
+    // Labels. A canvas font cannot use CSS variables, so name the families outright; the size is
+    // divided by the zoom so the text stays ~11px on screen. Highest-priority labels are placed
+    // first and any that would overlap an already placed one are skipped, so a dense graph stays legible.
+    const fontPx = 11 / k
+
     ctx.fillStyle = ink
-    ctx.font = `${11 / k}px var(--font-sans, system-ui, sans-serif)`
+    ctx.font = `${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`
     ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
 
-    for (const node of nodesRef.current) {
-      const matched = searching && matchesSearch(node, search)
+    const priority = (node: SimNode, matched: boolean): number =>
+      node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree
 
-      const wanted =
-        labelMode === 'never'
-          ? node.id === focus
-          : labelMode === 'always' || node.id === focus || near.has(node.id) || matched || node.degree >= 8 || k > 1.6
+    const candidates = nodesRef.current
+      .map(node => ({ matched: searching && matchesSearch(node, search), node }))
+      .filter(({ matched, node }) => {
+        if (labelMode === 'never') {
+          return node.id === focus
+        }
 
-      if (!wanted || (focus !== null && !near.has(node.id) && !matched)) {
+        if (focus !== null && !near.has(node.id) && !matched) {
+          return false
+        }
+
+        return labelMode === 'always' || node.id === focus || near.has(node.id) || matched || node.degree >= 6 || k > 1.2
+      })
+      .sort((a, b) => priority(b.node, b.matched) - priority(a.node, a.matched))
+      .slice(0, 400)
+
+    const placed: [number, number, number, number][] = []
+
+    for (const { matched, node } of candidates) {
+      const width = ctx.measureText(node.title).width
+      const left = node.x - width / 2
+      const top = node.y + radiusOf(node) + 2 / k
+      const box: [number, number, number, number] = [left, top, left + width, top + fontPx * 1.15]
+
+      if (node.id !== focus && placed.some(p => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
         continue
       }
 
-      ctx.globalAlpha = node.id === focus ? 1 : 0.8
-      ctx.fillText(node.title, node.x, node.y + radiusOf(node) + 11 / k)
+      placed.push(box)
+      ctx.globalAlpha = node.id === focus ? 1 : matched || near.has(node.id) ? 0.95 : 0.8
+      ctx.fillText(node.title, node.x, top)
     }
 
     ctx.globalAlpha = 1
@@ -236,8 +271,8 @@ export function GraphView(props: GraphViewProps) {
     const maxX = Math.max(...xs)
     const minY = Math.min(...ys)
     const maxY = Math.max(...ys)
-    const pad = 56
-    const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), 2.5)
+    const pad = 48
+    const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), 1.8)
 
     viewRef.current = { k, x: w / 2 - ((minX + maxX) / 2) * k, y: h / 2 - ((minY + maxY) / 2) * k }
     draw()
@@ -280,6 +315,11 @@ export function GraphView(props: GraphViewProps) {
       .filter(edge => known.has(edge.source) && known.has(edge.target))
       .map(edge => ({ source: edge.source, target: edge.target }))
 
+    // A different set of notes (local graph, a folder toggled, a big import) deserves a fresh fit; so does
+    // a remembered layout, whose view was never fitted this session. A note added or removed does not.
+    const changed = nodes.filter(node => !previous.has(node.id)).length + [...previous.keys()].filter(id => !known.has(id)).length
+    const bigChange = previous.size > 0 && changed >= Math.max(3, 0.25 * Math.max(previous.size, nodes.length))
+
     nodesRef.current = nodes
     linksRef.current = links
     simRef.current?.stop()
@@ -293,18 +333,18 @@ export function GraphView(props: GraphViewProps) {
         'link',
         forceLink<SimNode, SimLink>(links)
           .id(node => node.id)
-          .distance(34)
-          .strength(0.35)
+          .distance(48)
+          .strength(0.3)
       )
-      .force('charge', forceManyBody<SimNode>().strength(-55).distanceMax(260))
-      .force('center', forceCenter(0, 0).strength(0.02))
-      .force('collide', forceCollide<SimNode>().radius(node => radiusOf(node) + 2))
+      .force('charge', forceManyBody<SimNode>().strength(-130).distanceMax(340))
+      .force('collide', forceCollide<SimNode>().radius(node => radiusOf(node) + 4))
       .force('x', forceX<SimNode>(node => anchors.get(node.folder)?.x ?? 0).strength(cluster === 'none' ? 0.02 : 0.07))
       .force('y', forceY<SimNode>(node => anchors.get(node.folder)?.y ?? 0).strength(cluster === 'none' ? 0.02 : 0.07))
       .on('tick', draw)
       .on('end', () => {
-        if (!fittedRef.current) {
+        if (!fittedRef.current || refitRef.current) {
           fittedRef.current = true
+          refitRef.current = false
           fit()
         }
 
@@ -315,7 +355,9 @@ export function GraphView(props: GraphViewProps) {
 
     simRef.current = sim
 
-    if (warm && !fittedRef.current && sizeRef.current.w > 0) {
+    refitRef.current = warm || bigChange
+
+    if ((warm || bigChange) && sizeRef.current.w > 0) {
       fittedRef.current = true
       fit()
     }
@@ -589,7 +631,7 @@ export function GraphView(props: GraphViewProps) {
             onClick={() => onToggleFolder(folder)}
             type="button"
           >
-            <span className="vc-dot" style={{ background: cluster === 'none' ? hsl('', 58) : hsl(folder, 58) }} />
+            <span className="vc-dot" style={{ background: hsl(colorOf(folder), 58) }} />
             {folder || '(root)'}
           </button>
         ))}

@@ -55,7 +55,8 @@ export const CSS = `
 .vc-notice { flex: none; padding: 4px 8px; border-bottom: 1px solid var(--vc-line); text-align: left; width: 100%; }
 
 .vc-main { flex: 1; min-width: 0; min-height: 0; display: grid; }
-.vc-graph { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.vc-graph-wrap { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.vc-graph { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 .vc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .vc-legend { position: absolute; left: 8px; top: 38px; display: flex; flex-wrap: wrap; gap: 2px 10px; max-width: 60%;
   font-size: 0.6875rem; color: var(--vc-dim); }

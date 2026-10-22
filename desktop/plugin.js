@@ -290,12 +290,11 @@ function clampSplit(fraction) {
   }
   return fraction >= 0.98 ? 1 : fraction;
 }
-function folderHue(key) {
-  let hash = 0;
-  for (const char of key) {
-    hash = hash * 31 + char.charCodeAt(0) >>> 0;
-  }
-  return hash % 360;
+function folderHues(folders) {
+  const sorted = [...folders].sort();
+  return new Map(
+    sorted.map((folder, index2) => [folder, Math.round((205 + index2 * 360 / Math.max(sorted.length, 1)) % 360)])
+  );
 }
 function wikilinksToMarkdown(text) {
   return text.replace(WIKILINK, (_whole, bang, target, heading2, alias) => {
@@ -1294,8 +1293,9 @@ var VaultStore = class {
       hiddenInGraph: hiddenInGraph.includes(folder) ? hiddenInGraph.filter((item) => item !== folder) : [...hiddenInGraph, folder]
     });
   }
+  /** Remember settled node positions; merged, so a local graph does not erase the rest of the layout. */
   setPositions(positions) {
-    this.updateVault({ positions });
+    this.updateVault({ positions: { ...this.state.vault.positions, ...positions } });
   }
 };
 
@@ -1350,7 +1350,8 @@ var CSS = `
 .vc-notice { flex: none; padding: 4px 8px; border-bottom: 1px solid var(--vc-line); text-align: left; width: 100%; }
 
 .vc-main { flex: 1; min-width: 0; min-height: 0; display: grid; }
-.vc-graph { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.vc-graph-wrap { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.vc-graph { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 .vc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .vc-legend { position: absolute; left: 8px; top: 38px; display: flex; flex-wrap: wrap; gap: 2px 10px; max-width: 60%;
   font-size: 0.6875rem; color: var(--vc-dim); }
@@ -1746,35 +1747,6 @@ function FileTree(props) {
       }
     )
   ] });
-}
-
-// node_modules/d3-force/src/center.js
-function center_default(x3, y3) {
-  var nodes, strength = 1;
-  if (x3 == null) x3 = 0;
-  if (y3 == null) y3 = 0;
-  function force() {
-    var i2, n = nodes.length, node, sx = 0, sy = 0;
-    for (i2 = 0; i2 < n; ++i2) {
-      node = nodes[i2], sx += node.x, sy += node.y;
-    }
-    for (sx = (sx / n - x3) * strength, sy = (sy / n - y3) * strength, i2 = 0; i2 < n; ++i2) {
-      node = nodes[i2], node.x -= sx, node.y -= sy;
-    }
-  }
-  force.initialize = function(_) {
-    nodes = _;
-  };
-  force.x = function(_) {
-    return arguments.length ? (x3 = +_, force) : x3;
-  };
-  force.y = function(_) {
-    return arguments.length ? (y3 = +_, force) : y3;
-  };
-  force.strength = function(_) {
-    return arguments.length ? (strength = +_, force) : strength;
-  };
-  return force;
 }
 
 // node_modules/d3-quadtree/src/add.js
@@ -2676,9 +2648,9 @@ import { Codicon as Codicon2, usePluginI18n as usePluginI18n3 } from "@hermes/pl
 import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
 var TOUCHED_MS = 10 * 60 * 1e3;
 var radiusOf = (node) => 3 + Math.sqrt(node.degree) * 1.7;
-var hsl = (folder, lightness) => `hsl(${folderHue(folder)} 62% ${lightness}%)`;
+var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
 function folderAnchors(folders, mode) {
-  const ring = mode === "none" ? 0 : 90 + folders.length * 22;
+  const ring = mode === "none" ? 0 : 170 + folders.length * 30;
   return new Map(
     folders.map((folder, index2) => {
       const angle = index2 / Math.max(folders.length, 1) * Math.PI * 2;
@@ -2700,10 +2672,15 @@ function GraphView(props) {
   const cursorRef = useRef2(null);
   const frameRef = useRef2(0);
   const fittedRef = useRef2(false);
+  const refitRef = useRef2(false);
   const [pointer, setPointer] = useState2(false);
   const live = useRef2(props);
   live.current = props;
   const folders = useMemo2(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
+  const hues = useMemo2(() => folderHues(legendFolders), [legendFolders]);
+  const huesRef = useRef2(hues);
+  huesRef.current = hues;
+  const colorOf = (folder) => cluster === "none" ? 210 : huesRef.current.get(folder) ?? 210;
   const paint = () => {
     const canvas = canvasRef.current;
     if (!canvas || sizeRef.current.w === 0) {
@@ -2757,7 +2734,7 @@ function GraphView(props) {
       const dim = focus !== null && !near.has(node.id) || searching && !matchesSearch(node, search);
       const r = radiusOf(node);
       ctx.globalAlpha = dim ? 0.16 : 1;
-      ctx.fillStyle = cluster === "none" ? hsl("", 58) : hsl(node.folder, 58);
+      ctx.fillStyle = hsl(colorOf(node.folder), 58);
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -2786,17 +2763,33 @@ function GraphView(props) {
         ctx.fillRect(node.x - 1.5 / k, node.y - r - 5 / k, 3 / k, 3 / k);
       }
     }
+    const fontPx = 11 / k;
     ctx.fillStyle = ink;
-    ctx.font = `${11 / k}px var(--font-sans, system-ui, sans-serif)`;
+    ctx.font = `${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
     ctx.textAlign = "center";
-    for (const node of nodesRef.current) {
-      const matched = searching && matchesSearch(node, search);
-      const wanted = labelMode === "never" ? node.id === focus : labelMode === "always" || node.id === focus || near.has(node.id) || matched || node.degree >= 8 || k > 1.6;
-      if (!wanted || focus !== null && !near.has(node.id) && !matched) {
+    ctx.textBaseline = "top";
+    const priority = (node, matched) => node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree;
+    const candidates = nodesRef.current.map((node) => ({ matched: searching && matchesSearch(node, search), node })).filter(({ matched, node }) => {
+      if (labelMode === "never") {
+        return node.id === focus;
+      }
+      if (focus !== null && !near.has(node.id) && !matched) {
+        return false;
+      }
+      return labelMode === "always" || node.id === focus || near.has(node.id) || matched || node.degree >= 6 || k > 1.2;
+    }).sort((a2, b) => priority(b.node, b.matched) - priority(a2.node, a2.matched)).slice(0, 400);
+    const placed = [];
+    for (const { matched, node } of candidates) {
+      const width = ctx.measureText(node.title).width;
+      const left = node.x - width / 2;
+      const top2 = node.y + radiusOf(node) + 2 / k;
+      const box = [left, top2, left + width, top2 + fontPx * 1.15];
+      if (node.id !== focus && placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
         continue;
       }
-      ctx.globalAlpha = node.id === focus ? 1 : 0.8;
-      ctx.fillText(node.title, node.x, node.y + radiusOf(node) + 11 / k);
+      placed.push(box);
+      ctx.globalAlpha = node.id === focus ? 1 : matched || near.has(node.id) ? 0.95 : 0.8;
+      ctx.fillText(node.title, node.x, top2);
     }
     ctx.globalAlpha = 1;
   };
@@ -2816,8 +2809,8 @@ function GraphView(props) {
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
-    const pad = 56;
-    const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), 2.5);
+    const pad = 48;
+    const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), 1.8);
     viewRef.current = { k, x: w / 2 - (minX + maxX) / 2 * k, y: h / 2 - (minY + maxY) / 2 * k };
     draw();
   };
@@ -2847,16 +2840,19 @@ function GraphView(props) {
     });
     const known = new Set(nodes.map((node) => node.id));
     const links = graph.edges.filter((edge) => known.has(edge.source) && known.has(edge.target)).map((edge) => ({ source: edge.source, target: edge.target }));
+    const changed = nodes.filter((node) => !previous.has(node.id)).length + [...previous.keys()].filter((id) => !known.has(id)).length;
+    const bigChange = previous.size > 0 && changed >= Math.max(3, 0.25 * Math.max(previous.size, nodes.length));
     nodesRef.current = nodes;
     linksRef.current = links;
     simRef.current?.stop();
     const warm = nodes.length > 0 && restored / nodes.length > 0.8;
     const sim = simulation_default(nodes).alpha(warm ? 0.08 : 1).force(
       "link",
-      link_default(links).id((node) => node.id).distance(34).strength(0.35)
-    ).force("charge", manyBody_default().strength(-55).distanceMax(260)).force("center", center_default(0, 0).strength(0.02)).force("collide", collide_default().radius((node) => radiusOf(node) + 2)).force("x", x_default2((node) => anchors.get(node.folder)?.x ?? 0).strength(cluster === "none" ? 0.02 : 0.07)).force("y", y_default2((node) => anchors.get(node.folder)?.y ?? 0).strength(cluster === "none" ? 0.02 : 0.07)).on("tick", draw).on("end", () => {
-      if (!fittedRef.current) {
+      link_default(links).id((node) => node.id).distance(48).strength(0.3)
+    ).force("charge", manyBody_default().strength(-130).distanceMax(340)).force("collide", collide_default().radius((node) => radiusOf(node) + 4)).force("x", x_default2((node) => anchors.get(node.folder)?.x ?? 0).strength(cluster === "none" ? 0.02 : 0.07)).force("y", y_default2((node) => anchors.get(node.folder)?.y ?? 0).strength(cluster === "none" ? 0.02 : 0.07)).on("tick", draw).on("end", () => {
+      if (!fittedRef.current || refitRef.current) {
         fittedRef.current = true;
+        refitRef.current = false;
         fit();
       }
       live.current.onPositions(
@@ -2864,7 +2860,8 @@ function GraphView(props) {
       );
     });
     simRef.current = sim;
-    if (warm && !fittedRef.current && sizeRef.current.w > 0) {
+    refitRef.current = warm || bigChange;
+    if ((warm || bigChange) && sizeRef.current.w > 0) {
       fittedRef.current = true;
       fit();
     }
@@ -3072,7 +3069,7 @@ function GraphView(props) {
         onClick: () => onToggleFolder(folder),
         type: "button",
         children: [
-          /* @__PURE__ */ jsx3("span", { className: "vc-dot", style: { background: cluster === "none" ? hsl("", 58) : hsl(folder, 58) } }),
+          /* @__PURE__ */ jsx3("span", { className: "vc-dot", style: { background: hsl(colorOf(folder), 58) } }),
           folder || "(root)"
         ]
       },

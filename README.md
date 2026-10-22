@@ -2,6 +2,8 @@
 
 A [Hermes Desktop](https://hermes-agent.nousresearch.com) plugin that opens a local markdown vault (Obsidian-style `[[wikilinks]]`) as **one tab in the main workspace**: a collapsible file tree, a force-directed graph of your notes, and a tabbed editor pane behind a divider that can collapse either side completely.
 
+![The vault as a graph, with the file tree on the left](docs/screenshots/overview.png)
+
 **Local only.** Notes are read and written through the desktop app's Electron file bridge on the machine running Hermes Desktop. There is no backend, REST route, network access, or agent tool. Hermes' own agent keeps using whatever it already uses for notes.
 
 ## Use
@@ -29,6 +31,19 @@ The chip opens (or re-fronts) the Vault tab on that note. A name that does not e
 > When you mention a note from the user's Obsidian vault, link it with `::vault{note="<Folder/Note name>"}` (optionally `#Heading`) on its own line instead of pasting its path.
 
 Renaming or moving a note rewrites the links that pointed at it (aliases, headings and embeds preserved; links inside code are left alone). Notes with unsaved edits are skipped and reported.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Graph with a note open in the editor](docs/screenshots/editor.png) | ![Preview with an image and links](docs/screenshots/preview.png) |
+| Editor beside the graph; the divider can collapse either side. | Preview renders images, links and note embeds. |
+| ![Filtering the graph with #sensors](docs/screenshots/search.png) | ![Local graph of one note](docs/screenshots/local-graph.png) |
+| The filter dims everything that does not match (`#tag` works too). | Local graph: the open note and its neighbours. |
+
+These are rendered from the **fictional demo vault** in `demo/vault` (a made-up tide-pool research project; every name and result is invented) by a small harness that mounts the real plugin components in headless Edge/Chrome. Only the host app around them (Hermes' SDK, theme colours, markdown renderer) is simulated, so treat them as representative rather than literal Hermes Desktop captures. Regenerate with `node scripts/screenshots.mjs`; set `PLEXUS_EVAL="<js>"` to print an expression evaluated in the settled page when debugging a layout.
+
+To try the plugin without your own notes, choose `demo/vault` as the vault folder (or run `node demo/make-vault.mjs` to recreate it).
 
 ## Install
 
