@@ -2,13 +2,13 @@ import { useSyncExternalStore } from 'react'
 
 import { usePluginI18n } from '@hermes/plugin-sdk'
 
-import type { Bridge } from './bridge'
+import type { VaultFs } from './files'
 import { PLUGIN_ID } from './i18n'
 import type { ClusterMode, LabelMode, PrefsStore } from './prefs'
 import { chooseVaultFolder } from './vault-fs'
 
 /** Settings → Plugins → Vault. Everything here applies live to an open workspace. */
-export function VaultSettings({ fs, prefs: store }: { fs: Bridge; prefs: PrefsStore }) {
+export function VaultSettings({ fs, prefs: store }: { fs: VaultFs; prefs: PrefsStore }) {
   const t = usePluginI18n(PLUGIN_ID)
   const prefs = useSyncExternalStore(store.subscribe, store.get)
 
@@ -20,7 +20,7 @@ export function VaultSettings({ fs, prefs: store }: { fs: Bridge; prefs: PrefsSt
         <button
           className="vc-btn"
           onClick={() => {
-            void chooseVaultFolder(fs, prefs.vaultRoot || undefined).then(picked => picked && store.useVault(picked))
+            void chooseVaultFolder(fs).then(picked => picked && store.useVault(picked))
           }}
           type="button"
         >
@@ -75,6 +75,14 @@ export function VaultSettings({ fs, prefs: store }: { fs: Bridge; prefs: PrefsSt
         <input
           checked={prefs.showOrphans}
           onChange={event => store.set({ showOrphans: event.target.checked })}
+          type="checkbox"
+        />
+      </label>
+      <label>
+        <span>{t('settings.remoteImages')}</span>
+        <input
+          checked={prefs.remoteImages}
+          onChange={event => store.set({ remoteImages: event.target.checked })}
           type="checkbox"
         />
       </label>

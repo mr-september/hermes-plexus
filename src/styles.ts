@@ -146,6 +146,9 @@ export const MD_CSS = `
 export const PREVIEW_CSS = `
 .vc-embed { margin: 8px 0; padding: 4px 10px; border-left: 2px solid var(--vc-line); background: rgba(128, 128, 128, 0.06); }
 .vc-embed .vc-preview { padding: 0; }
+.vc-remote { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; padding: 6px 10px;
+  border: 1px dashed var(--vc-line); font-size: 0.75rem; color: var(--vc-dim); }
+.vc-remote .vc-btn { padding: 1px 10px; color: var(--vc-text); }
 .vc-embed-title { display: inline-block; padding: 0 4px; margin-left: -4px; color: var(--vc-dim); font-size: 0.75rem; }
 .vc-chip { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px;
   border: 1px solid var(--ui-stroke-secondary, rgba(128, 128, 128, 0.35)); border-radius: 999px; cursor: pointer;

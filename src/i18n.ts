@@ -11,6 +11,7 @@ export const en = {
   empty: {
     chooseHint: 'Choose the folder that holds your notes.',
     chooseVault: 'Choose vault folder…',
+    noAccess: 'Hermes no longer has access to this vault folder. Choose it again to grant access.',
     noNotes: 'No notes found in this folder.',
     openNote: 'Select a note in the graph or file tree.'
   },
@@ -49,6 +50,7 @@ export const en = {
     labelsAuto: 'When zoomed in',
     labelsNever: 'Never',
     orphans: 'Show notes with no links',
+    remoteImages: 'Load images linked from the web in Preview (the image host can see your IP address)',
     vault: 'Vault folder'
   },
   tree: {
@@ -75,9 +77,18 @@ export const en = {
     embedMissing: (name: string) => `Embedded note not found: ${name}`,
     embedTooDeep: 'Embedded too deeply',
     imageMissing: (name: string) => `Image not found: ${name}`,
-    openEmbedded: 'Open this note'
+    openEmbedded: 'Open this note',
+    remoteBlocked: (alt: string, host: string) => `${alt ? `${alt} · ` : ''}Image from ${host} not loaded`,
+    remoteLoad: 'Load remote images',
+    remoteWhy: 'Loading an image from the web tells its host your IP address and when you opened this note. You can turn this off again in Settings → Plugins → Vault.'
   },
   warn: {
+    depth: (path: string) =>
+      `Some folders were skipped: nesting deeper than 32 levels near "${path || '/'}" (possible symlink loop). Notes inside are not shown.`,
+    dismiss: 'Dismiss',
+    folders: (path: string) =>
+      `Stopped after 10,000 folders near "${path || '/'}" (possible symlink loop). Some notes are not shown.`,
+    truncated: (path: string) => `"${path || '/'}" has more entries than Hermes can list, so some notes are not shown.`,
     notFound: (name: string) => `Note not found: ${name}`,
     linksRewritten: (count: number, notes: number) => `Updated ${count} link(s) in ${notes} note(s).`,
     linksSkipped: (names: string) => `Could not update links in: ${names}`

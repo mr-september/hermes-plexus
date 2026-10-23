@@ -1,6 +1,6 @@
-import type { Bridge } from '../src/bridge'
+import type { VaultFs } from '../src/files'
 
-/** An in-memory disk behind the Electron file bridge's interface, with Windows-style paths. */
+/** An in-memory disk behind the vault file interface, with Windows-style paths. */
 export class FakeDisk {
   files = new Map<string, string>()
   /** Image files by absolute path → their data URL. */
@@ -22,7 +22,7 @@ export class FakeDisk {
 
   text = (rel: string): string | undefined => this.files.get(this.abs(rel))
 
-  bridge: Bridge = {
+  bridge: VaultFs = {
     readDir: async dir => {
       this.readDirCalls.push(dir)
 
@@ -68,7 +68,11 @@ export class FakeDisk {
 
       return true
     },
-    writeTextFile: async (path, content) => {
+    writeTextFile: async (path, content, options) => {
+      if (options?.exclusive && this.files.has(path)) {
+        throw new Error('That file already exists.')
+      }
+
       this.writes.push([path, content])
       this.files.set(path, content)
 

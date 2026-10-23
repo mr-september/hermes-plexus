@@ -7,91 +7,6 @@ import {
   PALETTE_AREA
 } from "@hermes/plugin-sdk";
 
-// src/bridge.ts
-function getBridge() {
-  return window.hermesDesktop;
-}
-
-// src/i18n.ts
-var PLUGIN_ID = "hermes-plexus";
-var en = {
-  common: { cancel: "Cancel", close: "Close", delete: "Delete", rename: "Rename" },
-  empty: {
-    chooseHint: "Choose the folder that holds your notes.",
-    chooseVault: "Choose vault folder\u2026",
-    noNotes: "No notes found in this folder.",
-    openNote: "Select a note in the graph or file tree."
-  },
-  graph: {
-    clusterFolder: "Cluster by folder",
-    fit: "Fit",
-    graphLabel: "Note graph. Arrow keys move between linked notes, Enter opens the selected note.",
-    local: "Local graph (this note and its neighbours)",
-    orphans: "Show unlinked notes",
-    pin: "Pin node",
-    search: "Filter notes\u2026 (#tag)",
-    stats: (notes, links) => `${notes} notes \xB7 ${links} links`,
-    unpin: "Unpin node"
-  },
-  note: {
-    addToChat: "Add to chat",
-    backlinks: "Linked from",
-    changedOnDisk: "Changed on disk since it was opened",
-    edit: "Edit",
-    loading: "Loading\u2026",
-    overwrite: "Overwrite",
-    preview: "Preview",
-    readOnly: "Too large or not text \u2014 shown read-only.",
-    reload: "Reload from disk",
-    saved: "Saved",
-    saving: "Saving\u2026",
-    unsaved: "Unsaved"
-  },
-  settings: {
-    autosave: "Autosave delay (ms)",
-    chooseVault: "Choose vault folder\u2026",
-    cluster: "Cluster graph by folder",
-    hiddenFolders: "Folders to skip (comma separated)",
-    labels: "Graph labels",
-    labelsAlways: "Always",
-    labelsAuto: "When zoomed in",
-    labelsNever: "Never",
-    orphans: "Show notes with no links",
-    vault: "Vault folder"
-  },
-  tree: {
-    changeVault: "Change vault folder",
-    collapse: "Collapse file tree",
-    deleteConfirm: "Delete?",
-    expand: "Expand file tree",
-    hideArchive: "Hide skipped folders",
-    newNote: "New note",
-    newNoteHere: "New note here",
-    rescan: "Rescan vault",
-    reveal: "Reveal in file tree",
-    showArchive: "Show skipped folders",
-    trash: "Move to trash"
-  },
-  vault: {
-    noteLink: (name2) => `Open "${name2}" in Vault`,
-    open: "Open Vault",
-    statusbarToggle: "Vault button",
-    title: "Vault",
-    touched: "Recently changed by something else"
-  },
-  preview: {
-    embedMissing: (name2) => `Embedded note not found: ${name2}`,
-    embedTooDeep: "Embedded too deeply",
-    imageMissing: (name2) => `Image not found: ${name2}`,
-    openEmbedded: "Open this note"
-  },
-  warn: {
-    notFound: (name2) => `Note not found: ${name2}`,
-    linksRewritten: (count, notes) => `Updated ${count} link(s) in ${notes} note(s).`,
-    linksSkipped: (names) => `Could not update links in: ${names}`
-  }
-};
-
 // src/model.ts
 var EMPTY_GRAPH = { edges: [], nodes: [] };
 var normalizeSlashes = (value) => value.replace(/\\/g, "/");
@@ -356,21 +271,48 @@ var IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 var isImageName = (name2) => IMAGE_EXT.test(name2.split("#")[0].trim());
 var EMBED = /!\[\[([^\]|#\n]+)((?:#[^\]|\n]*)?)((?:\|[^\]\n]*)?)\]\]|!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
 var REMOTE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
-function splitPreview(text) {
+var REMOTE_IMAGE = /^(?:https?:)?\/\//i;
+var REF_IMAGE = /!\[([^\]\n]*)\]\[([^\]\n]*)\]/g;
+var REF_DEFINITION = /^ {0,3}\[([^\]\n]+)\]:[ \t]*<?([^\s>]+)/gm;
+var RAW_TAG = /<(?!\/?(?:br|kbd|sub|sup|b|i|u|em|strong|mark|details|summary)\s*\/?>)(?=\/?[a-z][\w-]*[\s/>])/gi;
+function inlineRemoteRefs(text) {
+  const defs = /* @__PURE__ */ new Map();
+  for (const match of text.matchAll(REF_DEFINITION)) {
+    defs.set(match[1].trim().toLowerCase(), match[2]);
+  }
+  if (!defs.size) {
+    return text;
+  }
+  const code2 = codeRanges(text);
+  return text.replace(REF_IMAGE, (whole, alt, ref, offset) => {
+    const url = defs.get((ref || alt).trim().toLowerCase());
+    return url && REMOTE_IMAGE.test(url) && !inRanges(code2, offset) ? `![${alt}](${url})` : whole;
+  });
+}
+function withoutRawHtml(text) {
+  const code2 = codeRanges(text);
+  return text.replace(RAW_TAG, (whole, offset) => inRanges(code2, offset) ? whole : "&lt;");
+}
+function splitPreview(source) {
+  const text = inlineRemoteRefs(source);
   const code2 = codeRanges(text);
   const out = [];
   let cursor = 0;
   for (const match of text.matchAll(EMBED)) {
     const start = match.index;
     const wiki = match[1] !== void 0;
-    const target = (wiki ? match[1] : decodeUri(match[5].trim().replace(/\s+"[^"]*"$/, ""))).trim();
-    if (inRanges(code2, start) || !wiki && (REMOTE.test(target) || !isImageName(target))) {
+    const raw = wiki ? "" : match[5].trim().replace(/\s+"[^"]*"$/, "");
+    const remote = !wiki && REMOTE_IMAGE.test(raw);
+    const target = (wiki ? match[1] : decodeUri(raw)).trim();
+    if (inRanges(code2, start) || !wiki && !remote && (REMOTE.test(target) || !isImageName(target))) {
       continue;
     }
     if (start > cursor) {
       out.push({ kind: "md", text: text.slice(cursor, start) });
     }
-    if (wiki && !isImageName(target)) {
+    if (remote) {
+      out.push({ alt: match[4], kind: "remote", url: raw });
+    } else if (wiki && !isImageName(target)) {
       out.push({ anchor: match[2].slice(1).trim() || null, kind: "embed", target });
     } else {
       const size = wiki ? Number(match[3].slice(1).split("x")[0]) : 0;
@@ -429,6 +371,193 @@ var isValidNoteName = (name2) => {
   return clean.length > 0 && clean.length <= 200 && !/[\\/:*?"<>|]/.test(clean) && !/^\.+$/.test(clean);
 };
 
+// src/files.ts
+var NO_ACCESS = "no-access";
+var trimEnd = (path) => path.replace(/[\\/]+$/, "");
+var sepOf = (path) => path.includes("\\") ? "\\" : "/";
+function vaultFsFrom(files) {
+  let granted = null;
+  const refresh = async () => granted = await files.folders();
+  const locate = async (abs) => {
+    const find3 = (list) => {
+      let best = null;
+      for (const { id, path } of list) {
+        const rel = trimEnd(abs).toLowerCase() === trimEnd(path).toLowerCase() ? "" : relativeTo(path, abs);
+        if (rel !== null && (!best || path.length > best.length)) {
+          best = { folder: id, length: path.length, rel };
+        }
+      }
+      return best && { folder: best.folder, rel: best.rel };
+    };
+    return find3(granted ?? await refresh()) ?? find3(await refresh());
+  };
+  const absOf = (folderId, rel) => {
+    const base2 = granted?.find((item) => item.id === folderId)?.path ?? "";
+    return rel ? `${trimEnd(base2)}${sepOf(base2)}${rel.replace(/\//g, sepOf(base2))}` : base2;
+  };
+  const need = async (abs) => {
+    const at = await locate(abs);
+    if (!at) {
+      throw new Error(NO_ACCESS);
+    }
+    return at;
+  };
+  const failure = (path, res) => ({
+    error: res?.error ?? NO_ACCESS,
+    message: res?.message ?? NO_ACCESS,
+    ok: false,
+    path
+  });
+  return {
+    async pickFolder() {
+      const res = await files.requestFolder();
+      if (!res.ok) {
+        throw new Error(res.message);
+      }
+      granted = null;
+      return res.folder?.path ?? null;
+    },
+    async readDir(path) {
+      const at = await locate(path);
+      if (!at) {
+        return { entries: [], error: NO_ACCESS };
+      }
+      const res = await files.list(at.folder, at.rel);
+      return res.ok ? {
+        entries: res.entries.map((entry) => ({
+          isDirectory: entry.isDirectory,
+          name: entry.name,
+          path: absOf(at.folder, entry.path)
+        })),
+        truncated: res.truncated
+      } : { entries: [], error: res.message };
+    },
+    async readFileText(path) {
+      const at = await locate(path);
+      const res = at ? await files.readText(at.folder, at.rel) : null;
+      return res?.ok ? { path, text: res.text } : failure(path, res);
+    },
+    async readFileDataUrl(path) {
+      const at = await locate(path);
+      const res = at ? await files.readDataUrl(at.folder, at.rel) : null;
+      return res?.ok ? res.url : failure(path, res);
+    },
+    async writeTextFile(path, content2, options) {
+      const at = await need(path);
+      const res = await files.writeText(at.folder, at.rel, content2, options);
+      if (!res.ok) {
+        throw new Error(res.message);
+      }
+      return { path };
+    },
+    async renamePath(path, newName) {
+      const at = await need(path);
+      const res = await files.rename(at.folder, at.rel, newName);
+      if (!res.ok) {
+        throw new Error(res.message);
+      }
+      return { path: absOf(at.folder, res.path) };
+    },
+    async trashPath(path) {
+      const at = await need(path);
+      const res = await files.trash(at.folder, at.rel);
+      if (!res.ok) {
+        throw new Error(res.message);
+      }
+      return true;
+    }
+  };
+}
+
+// src/i18n.ts
+var PLUGIN_ID = "hermes-plexus";
+var en = {
+  common: { cancel: "Cancel", close: "Close", delete: "Delete", rename: "Rename" },
+  empty: {
+    chooseHint: "Choose the folder that holds your notes.",
+    chooseVault: "Choose vault folder\u2026",
+    noAccess: "Hermes no longer has access to this vault folder. Choose it again to grant access.",
+    noNotes: "No notes found in this folder.",
+    openNote: "Select a note in the graph or file tree."
+  },
+  graph: {
+    clusterFolder: "Cluster by folder",
+    fit: "Fit",
+    graphLabel: "Note graph. Arrow keys move between linked notes, Enter opens the selected note.",
+    local: "Local graph (this note and its neighbours)",
+    orphans: "Show unlinked notes",
+    pin: "Pin node",
+    search: "Filter notes\u2026 (#tag)",
+    stats: (notes, links) => `${notes} notes \xB7 ${links} links`,
+    unpin: "Unpin node"
+  },
+  note: {
+    addToChat: "Add to chat",
+    backlinks: "Linked from",
+    changedOnDisk: "Changed on disk since it was opened",
+    edit: "Edit",
+    loading: "Loading\u2026",
+    overwrite: "Overwrite",
+    preview: "Preview",
+    readOnly: "Too large or not text \u2014 shown read-only.",
+    reload: "Reload from disk",
+    saved: "Saved",
+    saving: "Saving\u2026",
+    unsaved: "Unsaved"
+  },
+  settings: {
+    autosave: "Autosave delay (ms)",
+    chooseVault: "Choose vault folder\u2026",
+    cluster: "Cluster graph by folder",
+    hiddenFolders: "Folders to skip (comma separated)",
+    labels: "Graph labels",
+    labelsAlways: "Always",
+    labelsAuto: "When zoomed in",
+    labelsNever: "Never",
+    orphans: "Show notes with no links",
+    remoteImages: "Load images linked from the web in Preview (the image host can see your IP address)",
+    vault: "Vault folder"
+  },
+  tree: {
+    changeVault: "Change vault folder",
+    collapse: "Collapse file tree",
+    deleteConfirm: "Delete?",
+    expand: "Expand file tree",
+    hideArchive: "Hide skipped folders",
+    newNote: "New note",
+    newNoteHere: "New note here",
+    rescan: "Rescan vault",
+    reveal: "Reveal in file tree",
+    showArchive: "Show skipped folders",
+    trash: "Move to trash"
+  },
+  vault: {
+    noteLink: (name2) => `Open "${name2}" in Vault`,
+    open: "Open Vault",
+    statusbarToggle: "Vault button",
+    title: "Vault",
+    touched: "Recently changed by something else"
+  },
+  preview: {
+    embedMissing: (name2) => `Embedded note not found: ${name2}`,
+    embedTooDeep: "Embedded too deeply",
+    imageMissing: (name2) => `Image not found: ${name2}`,
+    openEmbedded: "Open this note",
+    remoteBlocked: (alt, host3) => `${alt ? `${alt} \xB7 ` : ""}Image from ${host3} not loaded`,
+    remoteLoad: "Load remote images",
+    remoteWhy: "Loading an image from the web tells its host your IP address and when you opened this note. You can turn this off again in Settings \u2192 Plugins \u2192 Vault."
+  },
+  warn: {
+    depth: (path) => `Some folders were skipped: nesting deeper than 32 levels near "${path || "/"}" (possible symlink loop). Notes inside are not shown.`,
+    dismiss: "Dismiss",
+    folders: (path) => `Stopped after 10,000 folders near "${path || "/"}" (possible symlink loop). Some notes are not shown.`,
+    truncated: (path) => `"${path || "/"}" has more entries than Hermes can list, so some notes are not shown.`,
+    notFound: (name2) => `Note not found: ${name2}`,
+    linksRewritten: (count, notes) => `Updated ${count} link(s) in ${notes} note(s).`,
+    linksSkipped: (names) => `Could not update links in: ${names}`
+  }
+};
+
 // src/prefs.ts
 var DEFAULT_PREFS = {
   autosaveMs: 800,
@@ -436,6 +565,7 @@ var DEFAULT_PREFS = {
   hiddenFolders: ["archive", "_archived"],
   labels: "auto",
   noteFrac: 0.5,
+  remoteImages: false,
   showHidden: false,
   showOrphans: true,
   treeOpen: true,
@@ -511,18 +641,36 @@ var sepFor = (root) => root.includes("\\") ? "\\" : "/";
 var joinPath = (dir, name2) => `${dir.replace(/[\\/]+$/, "")}${sepFor(dir)}${name2}`;
 var dirPath = (root, dirRel) => dirRel ? joinPath(root, dirRel.replace(/\//g, sepFor(root))) : root;
 var BAD_NAME = 'Names cannot be empty or contain \\ / : * ? " < > |';
+var MAX_DEPTH = 32;
+var MAX_FOLDERS = 1e4;
 async function scanVault(fs, root, hidden) {
   const skip = new Set(hidden.map((name2) => name2.toLowerCase()));
   const notes = [];
   const assets = [];
+  const warnings = [];
   let failure = null;
-  const walk = async (dir) => {
-    const { entries, error } = await fs.readDir(dir);
+  let listings = 0;
+  const warn = (kind, dir) => {
+    if (!warnings.some((item) => item.kind === kind)) {
+      warnings.push({ kind, path: relativeTo(root, dir) ?? "" });
+    }
+  };
+  const walk = async (dir, depth) => {
+    if (depth > MAX_DEPTH) {
+      return warn("depth", dir);
+    }
+    if (++listings > MAX_FOLDERS) {
+      return warn("folders", dir);
+    }
+    const { entries, error, truncated } = await fs.readDir(dir);
     if (error) {
       if (dir === root) {
-        failure = `Cannot read vault folder (${error})`;
+        failure = error === NO_ACCESS ? NO_ACCESS : `Cannot read vault folder (${error})`;
       }
       return;
+    }
+    if (truncated) {
+      warn("truncated", dir);
     }
     const subdirs = [];
     for (const entry of entries) {
@@ -541,11 +689,11 @@ async function scanVault(fs, root, hidden) {
         }
       }
     }
-    await Promise.all(subdirs.map(walk));
+    await Promise.all(subdirs.map((sub) => walk(sub, depth + 1)));
   };
-  await walk(root);
+  await walk(root, 0);
   const byRel = (a2, b) => a2.rel.localeCompare(b.rel);
-  return failure ? fail(failure) : { assets: assets.sort(byRel), notes: notes.sort(byRel), ok: true };
+  return failure ? fail(failure) : { assets: assets.sort(byRel), notes: notes.sort(byRel), ok: true, warnings };
 }
 async function readNote(fs, path) {
   try {
@@ -583,7 +731,7 @@ async function createNote(fs, dir, name2, body) {
       return fail(`"${clean}" already exists`);
     }
     await fs.writeTextFile(path, body ?? `# ${noteTitle(`${clean}.md`)}
-`);
+`, { exclusive: true });
     return { ok: true, path };
   } catch (error) {
     return fail(error);
@@ -614,7 +762,7 @@ async function moveNote(fs, from, destDir) {
     if ((await readNote(fs, to)).ok) {
       return fail(`"${name2}" already exists in the destination`);
     }
-    await fs.writeTextFile(to, source.text);
+    await fs.writeTextFile(to, source.text, { exclusive: true });
     await fs.trashPath(from);
     return { ok: true, path: to };
   } catch (error) {
@@ -640,9 +788,12 @@ async function readDataUrl(fs, path) {
     return fail(error);
   }
 }
-async function chooseVaultFolder(fs, defaultPath) {
-  const picked = await fs.selectPaths?.({ defaultPath, directories: true, title: "Choose your vault folder" });
-  return picked?.[0] ?? null;
+async function chooseVaultFolder(fs) {
+  try {
+    return await fs.pickFolder?.() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // src/settings.tsx
@@ -659,7 +810,7 @@ function VaultSettings({ fs, prefs: store }) {
         {
           className: "vc-btn",
           onClick: () => {
-            void chooseVaultFolder(fs, prefs.vaultRoot || void 0).then((picked) => picked && store.useVault(picked));
+            void chooseVaultFolder(fs).then((picked) => picked && store.useVault(picked));
           },
           type: "button",
           children: t2("settings.chooseVault")
@@ -721,6 +872,17 @@ function VaultSettings({ fs, prefs: store }) {
         {
           checked: prefs.showOrphans,
           onChange: (event) => store.set({ showOrphans: event.target.checked }),
+          type: "checkbox"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxs("label", { children: [
+      /* @__PURE__ */ jsx("span", { children: t2("settings.remoteImages") }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          checked: prefs.remoteImages,
+          onChange: (event) => store.set({ remoteImages: event.target.checked }),
           type: "checkbox"
         }
       )
@@ -926,7 +1088,7 @@ var VaultStore = class {
       assets: found.assets,
       graph: this.graphFor(found.notes),
       notes: found.notes,
-      status: { loading: false },
+      status: { loading: false, warnings: found.warnings },
       touched
     });
     this.settle(true);
@@ -1436,6 +1598,9 @@ var MD_CSS = `
 var PREVIEW_CSS = `
 .vc-embed { margin: 8px 0; padding: 4px 10px; border-left: 2px solid var(--vc-line); background: rgba(128, 128, 128, 0.06); }
 .vc-embed .vc-preview { padding: 0; }
+.vc-remote { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; padding: 6px 10px;
+  border: 1px dashed var(--vc-line); font-size: 0.75rem; color: var(--vc-dim); }
+.vc-remote .vc-btn { padding: 1px 10px; color: var(--vc-text); }
 .vc-embed-title { display: inline-block; padding: 0 4px; margin-left: -4px; color: var(--vc-dim); font-size: 0.75rem; }
 .vc-chip { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px;
   border: 1px solid var(--ui-stroke-secondary, rgba(128, 128, 128, 0.35)); border-radius: 999px; cursor: pointer;
@@ -18094,7 +18259,7 @@ var Language = class {
     this.data = data;
     this.name = name2;
     if (!EditorState.prototype.hasOwnProperty("tree"))
-      Reflect.defineProperty(EditorState.prototype, "tree", { get() {
+      Object.defineProperty(EditorState.prototype, "tree", { get() {
         return syntaxTree(this);
       } });
     this.parser = parser;
@@ -21754,7 +21919,7 @@ function Editor(props) {
 import { useEffect as useEffect4, useMemo as useMemo3, useRef as useRef4, useState as useState3 } from "react";
 import { Streamdown, usePluginI18n as usePluginI18n4 } from "@hermes/plugin-sdk";
 import { jsx as jsx5, jsxs as jsxs4 } from "react/jsx-runtime";
-var MAX_DEPTH = 2;
+var MAX_DEPTH2 = 2;
 var normalizeText = (value) => value.replace(/\s+/g, " ").trim().toLowerCase();
 function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, text, trail = [] }) {
   const root = useRef4(null);
@@ -21783,7 +21948,7 @@ function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, text, t
       },
       ref: root,
       children: segments.map(
-        (segment, index2) => segment.kind === "md" ? segment.text.trim() ? /* @__PURE__ */ jsx5(Streamdown, { children: wikilinksToMarkdown(segment.text) }, index2) : null : segment.kind === "image" ? /* @__PURE__ */ jsx5(PreviewImage, { ctx, fromRel: rel, segment }, index2) : /* @__PURE__ */ jsx5(
+        (segment, index2) => segment.kind === "md" ? segment.text.trim() ? /* @__PURE__ */ jsx5(Streamdown, { children: wikilinksToMarkdown(ctx.remoteImages ? segment.text : withoutRawHtml(segment.text)) }, index2) : null : segment.kind === "image" ? /* @__PURE__ */ jsx5(PreviewImage, { ctx, fromRel: rel, segment }, index2) : segment.kind === "remote" ? /* @__PURE__ */ jsx5(RemoteImage, { ctx, segment }, index2) : /* @__PURE__ */ jsx5(
           EmbeddedNote,
           {
             anchor: segment.anchor,
@@ -21831,6 +21996,32 @@ function PreviewImage({
   }
   return state ? /* @__PURE__ */ jsx5("div", { className: "vc-dim", children: t2("preview.imageMissing", segment.target) }) : null;
 }
+var hostOf = (url) => {
+  try {
+    return new URL(url, "https://example.invalid").hostname;
+  } catch {
+    return url;
+  }
+};
+function RemoteImage({ ctx, segment }) {
+  const t2 = usePluginI18n4(PLUGIN_ID);
+  if (ctx.remoteImages) {
+    return /* @__PURE__ */ jsx5(
+      "img",
+      {
+        alt: segment.alt,
+        loading: "lazy",
+        referrerPolicy: "no-referrer",
+        src: segment.url,
+        style: { display: "block", height: "auto", maxWidth: "100%" }
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxs4("div", { className: "vc-remote", children: [
+    /* @__PURE__ */ jsx5("span", { title: segment.url, children: t2("preview.remoteBlocked", segment.alt, hostOf(segment.url)) }),
+    /* @__PURE__ */ jsx5("button", { className: "vc-btn", onClick: ctx.onLoadRemoteImages, title: t2("preview.remoteWhy"), type: "button", children: t2("preview.remoteLoad") })
+  ] });
+}
 function EmbeddedNote({
   anchor,
   ctx,
@@ -21842,7 +22033,7 @@ function EmbeddedNote({
   const t2 = usePluginI18n4(PLUGIN_ID);
   const rel = ctx.resolveNote(parseLinkTarget(target).note);
   const [text, setText] = useState3(void 0);
-  const blocked = depth >= MAX_DEPTH || rel !== void 0 && trail.includes(rel);
+  const blocked = depth >= MAX_DEPTH2 || rel !== void 0 && trail.includes(rel);
   useEffect4(() => {
     let live = true;
     setText(void 0);
@@ -21988,13 +22179,18 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
       imageUrl: (rel) => store.imageUrl(rel),
       noteText: (rel) => store.noteText(rel),
       onFollow: (raw, from) => void store.follow(raw, from),
+      onLoadRemoteImages: () => prefsStore.set({ remoteImages: true }),
+      remoteImages: prefs.remoteImages,
       resolveAsset: (target, from) => resolveAsset(target, from),
       resolveNote: (target) => resolveNote(target)
     }),
-    [resolveAsset, resolveNote, store]
+    [prefs.remoteImages, prefsStore, resolveAsset, resolveNote, store]
   );
+  const warnings = state.status.warnings ?? [];
+  const warningKey = warnings.map((item) => `${item.kind}:${item.path}`).join("|");
+  const [dismissedWarnings, setDismissedWarnings] = useState5("");
   const pickVault = async () => {
-    const picked = await chooseVaultFolder(fs, root || void 0);
+    const picked = await chooseVaultFolder(fs);
     if (picked) {
       prefsStore.useVault(picked);
     }
@@ -22067,6 +22263,10 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
       }
     ) }),
     /* @__PURE__ */ jsxs6("div", { style: { display: "flex", flex: 1, flexDirection: "column", minHeight: 0, minWidth: 0 }, children: [
+      warningKey && warningKey !== dismissedWarnings && /* @__PURE__ */ jsxs6("div", { className: "vc-banner vc-danger", role: "alert", children: [
+        /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: warnings.map((item) => t2(`warn.${item.kind}`, item.path)).join(" ") }),
+        /* @__PURE__ */ jsx7("button", { className: "vc-btn", onClick: () => setDismissedWarnings(warningKey), type: "button", children: t2("warn.dismiss") })
+      ] }),
       state.notice && /* @__PURE__ */ jsx7(
         "button",
         {
@@ -22087,7 +22287,10 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
           },
           children: [
             /* @__PURE__ */ jsxs6("div", { className: "vc-graph-wrap", style: { minHeight: 0, minWidth: 0, overflow: "hidden", position: "relative" }, children: [
-              state.status.error ? /* @__PURE__ */ jsx7("div", { className: "vc-banner vc-danger", children: state.status.error }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsx7("div", { className: "vc-empty", children: t2("empty.noNotes") }) : /* @__PURE__ */ jsx7(
+              state.status.error ? /* @__PURE__ */ jsxs6("div", { className: "vc-banner vc-danger", children: [
+                /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: state.status.error === NO_ACCESS ? t2("empty.noAccess") : state.status.error }),
+                /* @__PURE__ */ jsx7("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
+              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsx7("div", { className: "vc-empty", children: t2("empty.noNotes") }) : /* @__PURE__ */ jsx7(
                 GraphView,
                 {
                   cluster: prefs.cluster,
@@ -22209,12 +22412,12 @@ var plugin = {
   id: PLUGIN_ID,
   name: "Plexus",
   register(ctx) {
-    const fs = getBridge();
     ctx.onDispose(installStyles());
     ctx.onDispose(ctx.i18n.register({ en }));
-    if (!fs) {
+    if (!ctx.files) {
       return;
     }
+    const fs = vaultFsFrom(ctx.files);
     const prefs = new PrefsStore(ctx.storage);
     let store = null;
     let close = null;

@@ -7,8 +7,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { host } from '@hermes/plugin-sdk'
 
-import { FakeDisk } from './fake-disk'
-
 type Registered = { area: string; data?: { run?: () => void; defaults?: string[] }; id: string }
 
 let plugin: { id: string; register: (ctx: unknown) => void }
@@ -23,13 +21,20 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function makeCtx() {
+/** `ctx.files` with no folder granted yet, so the workspace opens on its "choose a folder" prompt. */
+const files = {
+  folders: async () => [],
+  requestFolder: async () => ({ ok: true, folder: null })
+}
+
+function makeCtx(withFiles = true) {
   const registered: Registered[] = []
   const disposers: (() => void)[] = []
   const data = new Map<string, unknown>()
 
   return {
     ctx: {
+      ...(withFiles ? { files } : {}),
       i18n: { register: () => () => undefined, t: (key: string) => key },
       onDispose: (fn: () => void) => void disposers.push(fn),
       registerMany: (items: Registered[]) => void registered.push(...items),
@@ -55,10 +60,13 @@ describe('desktop/plugin.js', () => {
     expect(plugin.id).toBe('hermes-plexus')
   })
 
-  it('registers a palette command and a keybind, installs styles, and opens one workspace tab', () => {
-    const disk = new FakeDisk('C:\\v', { 'A.md': 'a [[B]]', 'B.md': 'b' })
+  it('reaches the disk only through ctx.files, never the raw desktop bridge', async () => {
+    const { readFileSync } = await import('node:fs')
 
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = disk.bridge
+    expect(readFileSync('desktop/plugin.js', 'utf8')).not.toMatch(/hermesDesktop|selectPaths/)
+  })
+
+  it('registers a palette command and a keybind, installs styles, and opens one workspace tab', () => {
 
     const open = vi.spyOn(host, 'openWorkspace')
     const { ctx, disposers, registered } = makeCtx()
@@ -91,8 +99,6 @@ describe('desktop/plugin.js', () => {
   })
 
   it('adds a status-bar button that opens the tab and is listed in the bar show/hide menu', () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = new FakeDisk('C:\\v', {}).bridge
-
     const open = vi.spyOn(host, 'openWorkspace')
     const { ctx, registered } = makeCtx()
 
@@ -111,8 +117,6 @@ describe('desktop/plugin.js', () => {
   })
 
   it('renders a chat chip for ::vault{note="…"} that opens the tab, and leaves odd attributes as text', () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = new FakeDisk('C:\\v', {}).bridge
-
     const open = vi.spyOn(host, 'openWorkspace')
     const { ctx, registered } = makeCtx()
 
@@ -134,10 +138,8 @@ describe('desktop/plugin.js', () => {
     expect(screen.getByText('::vault{note="x"}')).toBeTruthy()
   })
 
-  it('does nothing without the Electron file bridge', () => {
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
-
-    const { ctx, registered } = makeCtx()
+  it('does nothing on a desktop without ctx.files', () => {
+    const { ctx, registered } = makeCtx(false)
 
     plugin.register(ctx)
     expect(registered).toHaveLength(0)

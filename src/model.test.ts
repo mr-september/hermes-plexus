@@ -22,7 +22,8 @@ import {
   sectionOf,
   splitPreview,
   stripFrontmatter,
-  wikilinksToMarkdown
+  wikilinksToMarkdown,
+  withoutRawHtml
 } from './model'
 
 describe('relativeTo', () => {
@@ -231,8 +232,37 @@ describe('splitPreview', () => {
       { alt: 'alt', kind: 'image', target: 'img/p q.jpg', width: null },
       { kind: 'md', text: ' c ' },
       { anchor: 'Sec', kind: 'embed', target: 'Other' },
-      { kind: 'md', text: ' d ![r](https://x/y.png) e' }
+      { kind: 'md', text: ' d ' },
+      { alt: 'r', kind: 'remote', url: 'https://x/y.png' },
+      { kind: 'md', text: ' e' }
     ])
+  })
+
+  it('pulls out remote images, including reference-style ones, so the preview can gate them', () => {
+    const text = 'a ![one][r1] b ![two][] c ![three](//cdn.example/t?id=3 "title") d ![d](data:image/png;base64,AA) e\n\n[r1]: https://x/one.png\n[two]: http://x/two.png\n'
+
+    expect(splitPreview(text).filter(s => s.kind === 'remote')).toEqual([
+      { alt: 'one', kind: 'remote', url: 'https://x/one.png' },
+      { alt: 'two', kind: 'remote', url: 'http://x/two.png' },
+      { alt: 'three', kind: 'remote', url: '//cdn.example/t?id=3' }
+    ])
+    // The data-URL image makes no request, so it stays in the markdown.
+    expect(JSON.stringify(splitPreview(text))).toContain('data:image/png')
+  })
+
+  it('does not treat remote image syntax inside code as an image', () => {
+    expect(splitPreview('`![x](https://x/y.png)`')).toEqual([{ kind: 'md', text: '`![x](https://x/y.png)`' }])
+  })
+})
+
+describe('withoutRawHtml', () => {
+  it('escapes tags that can load things, keeps bare formatting tags, autolinks and code', () => {
+    expect(withoutRawHtml('a <img src="https://x/y.png"> b <div style="background:url(https://x)">c</div> </p>')).toBe(
+      'a &lt;img src="https://x/y.png"> b &lt;div style="background:url(https://x)">c&lt;/div> &lt;/p>'
+    )
+    expect(withoutRawHtml('x<br>y <kbd>K</kbd> <https://x.test/a> `<img src=x>` <b class="c">')).toBe(
+      'x<br>y <kbd>K</kbd> <https://x.test/a> `<img src=x>` &lt;b class="c">'
+    )
   })
 
   it('leaves code alone and returns a single run when nothing matches', () => {

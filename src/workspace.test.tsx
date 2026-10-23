@@ -91,6 +91,38 @@ describe('VaultWorkspace', () => {
     await waitFor(() => expect(disk.text('Alpha.md')).toBe('mine'))
   })
 
+  it('keeps web images off until one click on the preview placeholder turns them on', async () => {
+    mount()
+    await screen.findByText('Alpha')
+    disk.files.set(disk.abs('Web.md'), 'a ![pic](https://img.example/p.png)')
+    await store.scan('full')
+
+    fireEvent.click(await screen.findByText('Web'))
+    await waitFor(() => expect(store.get().tabs[0]?.status).toBe('ready'))
+    fireEvent.click(screen.getByText('Preview'))
+
+    expect(prefs.get().remoteImages).toBe(false)
+    expect(screen.queryByRole('img')).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load remote images' }))
+
+    expect(prefs.get().remoteImages).toBe(true)
+    expect(((await screen.findByRole('img')) as HTMLImageElement).src).toBe('https://img.example/p.png')
+  })
+
+  it('offers to choose the folder again when the vault grant is gone', async () => {
+    const pick = vi.fn(async () => null)
+
+    disk.bridge.readDir = async () => ({ entries: [], error: 'no-access' })
+    disk.bridge.pickFolder = pick
+    prefs.set({ showHidden: true })
+    mount()
+
+    await screen.findByText('Hermes no longer has access to this vault folder. Choose it again to grant access.')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Choose vault folder…' })[0]!)
+    expect(pick).toHaveBeenCalled()
+  })
+
   it('collapses the note pane to nothing and back via the keyboard-operable divider', async () => {
     mount()
     fireEvent.click(await screen.findByText('Alpha'))

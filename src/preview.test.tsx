@@ -19,6 +19,8 @@ function makeCtx(overrides: Partial<PreviewContext> = {}): PreviewContext {
     imageUrl: async rel => (rel === 'img/pic.png' ? 'data:image/png;base64,AAAA' : null),
     noteText: async rel => notes[rel] ?? null,
     onFollow: vi.fn(),
+    onLoadRemoteImages: vi.fn(),
+    remoteImages: false,
     resolveAsset: target => (target.endsWith('pic.png') ? 'img/pic.png' : undefined),
     resolveNote: target => resolve(parseLinkTarget(target).note),
     ...overrides
@@ -34,6 +36,31 @@ describe('NotePreview', () => {
     expect(img.src).toBe('data:image/png;base64,AAAA')
     expect(img.style.width).toBe('300px')
     expect(screen.getAllByTestId('markdown').map(el => el.textContent)).toEqual(['before ', ' after'])
+  })
+
+  it('holds back web images behind a one-click placeholder, and the raw HTML that could load them', () => {
+    const ctx = makeCtx()
+
+    render(<NotePreview ctx={ctx} rel="A.md" text={'![logo](https://img.example/a.png) <img src="https://t.example/p.gif">'} />)
+
+    expect(screen.queryByRole('img')).toBeNull()
+    screen.getByText('logo · Image from img.example not loaded')
+    expect(screen.getByTestId('markdown').textContent).toContain('&lt;img')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load remote images' }))
+    expect(ctx.onLoadRemoteImages).toHaveBeenCalledOnce()
+  })
+
+  it('shows web images, without a referrer, once remote images are allowed', () => {
+    render(
+      <NotePreview ctx={makeCtx({ remoteImages: true })} rel="A.md" text="![logo](https://img.example/a.png)" />
+    )
+
+    const img = screen.getByRole('img') as HTMLImageElement
+
+    expect(img.src).toBe('https://img.example/a.png')
+    expect(img.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(screen.queryByRole('button', { name: 'Load remote images' })).toBeNull()
   })
 
   it('says so when an image cannot be found', async () => {

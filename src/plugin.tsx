@@ -4,8 +4,9 @@
  * and their [[wikilinks]], and a tabbed editor pane behind a divider that can collapse
  * either side entirely.
  *
- * Local only. Notes are read and written through the desktop app's Electron file bridge on
- * this machine; there is no backend, REST route or network access.
+ * Local only. Notes are read and written through the desktop app's folder-scoped file API
+ * (`ctx.files`) inside the one folder the user grants; there is no backend, REST route or
+ * network access (remote images in notes load only if the user turns that on).
  */
 
 import * as sdk from '@hermes/plugin-sdk'
@@ -19,7 +20,7 @@ import {
   type PaletteContribution
 } from '@hermes/plugin-sdk'
 
-import { getBridge } from './bridge'
+import { vaultFsFrom } from './files'
 import { en, PLUGIN_ID } from './i18n'
 import { noteTitle, parseLinkTarget } from './model'
 import { PrefsStore } from './prefs'
@@ -38,15 +39,15 @@ const plugin: HermesPlugin = {
   id: PLUGIN_ID,
   name: 'Plexus',
   register(ctx) {
-    const fs = getBridge()
-
     ctx.onDispose(installStyles())
     ctx.onDispose(ctx.i18n.register({ en }))
 
-    if (!fs) {
-      // Without Electron's file bridge (web build, older shell) there is nothing to open.
+    if (!ctx.files) {
+      // A desktop build without folder-scoped file access (`ctx.files`) has nothing to open a vault with.
       return
     }
+
+    const fs = vaultFsFrom(ctx.files)
 
     const prefs = new PrefsStore(ctx.storage)
     let store: null | VaultStore = null

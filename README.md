@@ -2,7 +2,7 @@
 
 # Plexus
 
-Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). One workspace tab holds a file tree, a force-directed graph of your notes and their `[[wikilinks]]`, and a tabbed editor; drag the divider to fold either side away. Notes are read and written on your own machine, with no backend and no network. Unofficial: not affiliated with Nous Research or Obsidian.
+Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). One workspace tab holds a file tree, a force-directed graph of your notes and their `[[wikilinks]]`, and a tabbed editor; drag the divider to fold either side away. Notes are read and written on your own machine, with no backend and no network (images that notes link from the web load only if you turn that on). Unofficial: not affiliated with Nous Research or Obsidian.
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Hermes Desktop](https://img.shields.io/badge/Hermes%20Desktop-%E2%89%A50.21.5-6c5ce7.svg)](https://hermes-agent.nousresearch.com)
@@ -96,9 +96,9 @@ The chip opens or re-fronts the tab on that note. A name that does not exist is 
 
 | What | Where |
 |---|---|
-| Your notes (`.md`) and images used by Preview | Read from the vault folder you pick, through the desktop app's file bridge. Edits are written back as UTF-8 text. Deleting moves a note to the OS trash. |
+| Your notes (`.md`) and images used by Preview | Read and written inside the one vault folder you pick, through the desktop app's folder-scoped file API (`ctx.files`). Hermes enforces the boundary: nothing outside that folder is reachable, and the grant is listed (and revocable) under Capabilities → Plugins → Folder access. Edits are written back as UTF-8 text. Deleting moves a note to the OS trash. |
 | Settings, open tabs, graph layout | Hermes plugin storage on this machine, keyed per vault. |
-| Network | None. There is no backend, REST route or agent tool. |
+| Network | None by default. There is no backend, REST route or agent tool. The one exception is opt-in: images that a note links from the web (`![](https://…)`, including reference-style links) show as a placeholder in Preview, and load only after you click **Load remote images** (or tick it in Settings → Plugins → Vault). Loading one tells its host your IP address and when you opened the note. Raw HTML in notes is shown as text while the setting is off. |
 | Dotted folders (`.obsidian`, `.git`) and skipped folders (`archive`, `_archived` by default) | Not scanned. |
 
 ## Install
@@ -110,7 +110,7 @@ npm install
 npm run deploy      # builds, then copies into <HERMES_HOME>/desktop-plugins/hermes-plexus/
 ```
 
-Hermes watches that folder and hot-reloads the plugin on every save, so the desktop app needs no rebuild. It needs Hermes Desktop with `host.openWorkspace` (≥ 0.21.5 per the SDK docs).
+Hermes watches that folder and hot-reloads the plugin on every save, so the desktop app needs no rebuild. It needs a Hermes Desktop release that provides `ctx.files` (folder-scoped file access; first released after v0.22.5).
 
 To try it without your own notes, choose `demo/vault` as the vault folder (or recreate it with `node demo/make-vault.mjs`).
 
@@ -138,16 +138,14 @@ plugin.yaml           catalog manifest
 ## Known limits
 
 - No live file watching: the vault rescans when the window regains focus (a full re-read up to 1,500 notes, folder listing only above that), after saves, and on the rescan button.
-- A save is check-then-write. The bridge has no compare-and-swap, so an edit made by another program in the few milliseconds between the check and the write can be lost.
-- Notes over the bridge's 512 KiB preview cap open read-only. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
+- A save is check-then-write. `ctx.files` has no compare-and-swap, so an edit made by another program in the few milliseconds between the check and the write can be lost.
+- A note larger than 4 MiB (the file API's read limit) or not UTF-8 text cannot be opened. A vault with a symlink loop is scanned to 32 levels deep, and the workspace shows a warning. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
 - The editor's highlighting is regex-based, not a full markdown parser.
 - UI strings are English only; add a locale object in `src/i18n.ts`.
 
 ## Build notes
 
 `desktop/plugin.js` is the **built** bundle and is committed, because that is the file Hermes installs and loads (`hermes plugins validate .` checks it). Rebuild it with `npm run build` after changing `src/`; `npm test` rebuilds it first.
-
-One line of a dependency is rewritten at build time (`scripts/build.mjs`): `@codemirror/language` extends its own `EditorState` class with `Object.defineProperty(EditorState.prototype, "tree", …)`. That is a bundled library adjusting a class it ships, which the catalog rules allow, but Hermes' static admission lint matches the literal `Object.defineProperty(<X>.prototype` and cannot tell the difference. The build swaps it for the equivalent `Reflect.defineProperty`, and fails if the library's line ever changes so the rewrite cannot go stale.
 
 <div align="center">
 

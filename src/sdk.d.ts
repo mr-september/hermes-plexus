@@ -30,7 +30,47 @@ declare module '@hermes/plugin-sdk' {
     title: string
   }
 
+  export type PluginFilesResult<T extends object = object> =
+    | ({ ok: true } & T)
+    | { error: string; message: string; ok: false }
+
+  export interface PluginFolder {
+    id: string
+    name: string
+    /** Absolute path the user picked, for display only. */
+    path: string
+  }
+
+  export interface PluginFileEntry {
+    isDirectory: boolean
+    name: string
+    /** Relative to the folder, `/`-separated. */
+    path: string
+  }
+
+  /** `ctx.files`: folder-scoped file access. Paths are relative to a folder the user granted. */
+  export interface PluginFiles {
+    folders: () => Promise<PluginFolder[]>
+    list: (
+      folder: string,
+      path?: string
+    ) => Promise<PluginFilesResult<{ entries: PluginFileEntry[]; truncated: boolean }>>
+    readDataUrl: (folder: string, path: string) => Promise<PluginFilesResult<{ url: string }>>
+    readText: (folder: string, path: string) => Promise<PluginFilesResult<{ mtimeMs: number; size: number; text: string }>>
+    rename: (folder: string, path: string, name: string) => Promise<PluginFilesResult<{ path: string }>>
+    requestFolder: () => Promise<PluginFilesResult<{ folder: PluginFolder | null }>>
+    trash: (folder: string, path: string) => Promise<PluginFilesResult>
+    writeText: (
+      folder: string,
+      path: string,
+      text: string,
+      options?: { exclusive?: boolean }
+    ) => Promise<PluginFilesResult<{ mtimeMs: number; path: string; size: number }>>
+  }
+
   export interface PluginContext {
+    /** Absent on desktop builds that predate folder-scoped file access. */
+    files?: PluginFiles
     i18n: {
       register: (bundles: Record<string, Record<string, unknown>>) => () => void
       t: (key: string, ...args: unknown[]) => string

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
 
-import type { Bridge } from './bridge'
+import { NO_ACCESS, type VaultFs } from './files'
 import { FileTree } from './file-tree'
 import { GraphView } from './graph-view'
 import { PLUGIN_ID } from './i18n'
@@ -19,7 +19,7 @@ const FULL_RESCAN_LIMIT = 1500
 const STEP = 0.05
 
 export interface WorkspaceProps {
-  fs: Bridge
+  fs: VaultFs
   prefs: PrefsStore
   store: VaultStore
 }
@@ -79,14 +79,20 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
       imageUrl: rel => store.imageUrl(rel),
       noteText: rel => store.noteText(rel),
       onFollow: (raw, from) => void store.follow(raw, from),
+      onLoadRemoteImages: () => prefsStore.set({ remoteImages: true }),
+      remoteImages: prefs.remoteImages,
       resolveAsset: (target, from) => resolveAsset(target, from),
       resolveNote: target => resolveNote(target)
     }),
-    [resolveAsset, resolveNote, store]
+    [prefs.remoteImages, prefsStore, resolveAsset, resolveNote, store]
   )
 
+  const warnings = state.status.warnings ?? []
+  const warningKey = warnings.map(item => `${item.kind}:${item.path}`).join('|')
+  const [dismissedWarnings, setDismissedWarnings] = useState('')
+
   const pickVault = async () => {
-    const picked = await chooseVaultFolder(fs, root || undefined)
+    const picked = await chooseVaultFolder(fs)
 
     if (picked) {
       prefsStore.useVault(picked)
@@ -181,6 +187,14 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
       </div>
 
       <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+        {warningKey && warningKey !== dismissedWarnings && (
+          <div className="vc-banner vc-danger" role="alert">
+            <span style={{ flex: 1 }}>{warnings.map(item => t(`warn.${item.kind}`, item.path)).join(' ')}</span>
+            <button className="vc-btn" onClick={() => setDismissedWarnings(warningKey)} type="button">
+              {t('warn.dismiss')}
+            </button>
+          </div>
+        )}
         {state.notice && (
           <button
             className={`vc-notice ${state.notice.kind === 'error' ? 'vc-danger' : 'vc-dim'}`}
@@ -200,7 +214,12 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
         >
           <div className="vc-graph-wrap" style={{ minHeight: 0, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
             {state.status.error ? (
-              <div className="vc-banner vc-danger">{state.status.error}</div>
+              <div className="vc-banner vc-danger">
+                <span style={{ flex: 1 }}>{state.status.error === NO_ACCESS ? t('empty.noAccess') : state.status.error}</span>
+                <button className="vc-btn" onClick={() => void pickVault()} type="button">
+                  {t('empty.chooseVault')}
+                </button>
+              </div>
             ) : !state.status.loading && notes.length === 0 ? (
               <div className="vc-empty">{t('empty.noNotes')}</div>
             ) : (

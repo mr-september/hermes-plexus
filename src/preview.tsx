@@ -3,13 +3,25 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Streamdown, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { PLUGIN_ID } from './i18n'
-import { noteTitle, parseLinkTarget, sectionOf, splitPreview, stripFrontmatter, wikilinksToMarkdown } from './model'
+import {
+  noteTitle,
+  parseLinkTarget,
+  sectionOf,
+  splitPreview,
+  stripFrontmatter,
+  wikilinksToMarkdown,
+  withoutRawHtml
+} from './model'
 
 /** What the preview needs from the vault; injected so it stays testable and free of store details. */
 export interface PreviewContext {
   imageUrl: (assetRel: string) => Promise<null | string>
   noteText: (rel: string) => Promise<null | string>
   onFollow: (raw: string, fromRel: string) => void
+  /** One click on a blocked remote image: turn the setting on. */
+  onLoadRemoteImages: () => void
+  /** Whether images linked from the web may load (off by default: the image's host sees the request). */
+  remoteImages: boolean
   resolveAsset: (target: string, fromRel: string) => string | undefined
   /** A link target (without anchor) to the note it names. */
   resolveNote: (target: string) => string | undefined
@@ -71,9 +83,15 @@ export function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, 
     >
       {segments.map((segment, index) =>
         segment.kind === 'md' ? (
-          segment.text.trim() ? <Streamdown key={index}>{wikilinksToMarkdown(segment.text)}</Streamdown> : null
+          segment.text.trim() ? (
+            <Streamdown key={index}>
+              {wikilinksToMarkdown(ctx.remoteImages ? segment.text : withoutRawHtml(segment.text))}
+            </Streamdown>
+          ) : null
         ) : segment.kind === 'image' ? (
           <PreviewImage ctx={ctx} fromRel={rel} key={index} segment={segment} />
+        ) : segment.kind === 'remote' ? (
+          <RemoteImage ctx={ctx} key={index} segment={segment} />
         ) : (
           <EmbeddedNote
             anchor={segment.anchor}
@@ -130,6 +148,40 @@ function PreviewImage({
   }
 
   return state ? <div className="vc-dim">{t('preview.imageMissing', segment.target)}</div> : null
+}
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url, 'https://example.invalid').hostname
+  } catch {
+    return url
+  }
+}
+
+/** An image linked from the web: a click-to-enable placeholder until the user allows remote images. */
+function RemoteImage({ ctx, segment }: { ctx: PreviewContext; segment: { alt: string; url: string } }) {
+  const t = usePluginI18n(PLUGIN_ID)
+
+  if (ctx.remoteImages) {
+    return (
+      <img
+        alt={segment.alt}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        src={segment.url}
+        style={{ display: 'block', height: 'auto', maxWidth: '100%' }}
+      />
+    )
+  }
+
+  return (
+    <div className="vc-remote">
+      <span title={segment.url}>{t('preview.remoteBlocked', segment.alt, hostOf(segment.url))}</span>
+      <button className="vc-btn" onClick={ctx.onLoadRemoteImages} title={t('preview.remoteWhy')} type="button">
+        {t('preview.remoteLoad')}
+      </button>
+    </div>
+  )
 }
 
 function EmbeddedNote({

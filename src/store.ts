@@ -5,7 +5,7 @@
  * against a fake disk.
  */
 
-import type { Bridge } from './bridge'
+import type { VaultFs } from './files'
 import {
   backlinksOf,
   buildGraph,
@@ -33,6 +33,7 @@ import {
   renameNote,
   type Result,
   scanVault,
+  type ScanWarning,
   trashNote,
   writeNote
 } from './vault-fs'
@@ -71,7 +72,7 @@ export interface StoreState {
   notes: VaultNote[]
   notice: null | Notice
   root: string
-  status: { error?: string; loading: boolean }
+  status: { error?: string; loading: boolean; warnings?: ScanWarning[] }
   tabs: OpenNote[]
   /** Notes changed on disk by something other than this plugin → when we noticed. */
   touched: Record<string, number>
@@ -135,7 +136,7 @@ export class VaultStore {
   private imageCache = new Map<string, string>()
 
   constructor(
-    private fs: Bridge,
+    private fs: VaultFs,
     private prefs: PrefsStore,
     private t: Translate,
     private now: () => number = Date.now
@@ -330,7 +331,7 @@ export class VaultStore {
       assets: found.assets,
       graph: this.graphFor(found.notes),
       notes: found.notes,
-      status: { loading: false },
+      status: { loading: false, warnings: found.warnings },
       touched
     })
     this.settle(true)

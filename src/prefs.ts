@@ -18,6 +18,8 @@ export interface Prefs {
   labels: LabelMode
   /** Fraction of the graph/notes area given to the note pane (0 hides it, 1 hides the graph). */
   noteFrac: number
+  /** Load images that notes link from the web when previewing (the image's host sees the request). Off by default. */
+  remoteImages: boolean
   showHidden: boolean
   showOrphans: boolean
   treeOpen: boolean
@@ -32,6 +34,7 @@ export const DEFAULT_PREFS: Prefs = {
   hiddenFolders: ['archive', '_archived'],
   labels: 'auto',
   noteFrac: 0.5,
+  remoteImages: false,
   showHidden: false,
   showOrphans: true,
   treeOpen: true,

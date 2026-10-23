@@ -1,10 +1,10 @@
 /**
  * Pure vault model: path math, wikilink parsing/resolution/rewriting, tags,
- * graph building and view helpers. No DOM, no bridge — all unit-tested.
+ * graph building and view helpers. No DOM, no disk — all unit-tested.
  */
 
 export interface VaultNote {
-  /** Absolute path as the Electron bridge reports it. */
+  /** Absolute path inside the vault folder. */
   path: string
   /** Vault-relative path with forward slashes, e.g. `Projects/Foo.md`. */
   rel: string
@@ -465,16 +465,56 @@ export type PreviewSegment =
   | { kind: 'embed'; anchor: null | string; target: string }
   | { alt: string; kind: 'image'; target: string; width: null | number }
   | { kind: 'md'; text: string }
+  | { alt: string; kind: 'remote'; url: string }
 
 const EMBED = /!\[\[([^\]|#\n]+)((?:#[^\]|\n]*)?)((?:\|[^\]\n]*)?)\]\]|!\[([^\]\n]*)\]\(([^)\n]+)\)/g
 const REMOTE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i
+const REMOTE_IMAGE = /^(?:https?:)?\/\//i
+const REF_IMAGE = /!\[([^\]\n]*)\]\[([^\]\n]*)\]/g
+const REF_DEFINITION = /^ {0,3}\[([^\]\n]+)\]:[ \t]*<?([^\s>]+)/gm
+/** An HTML tag opener, except bare formatting tags (`<br>`, `<kbd>`, `</b>`, …) that carry no attributes and load nothing. */
+const RAW_TAG = /<(?!\/?(?:br|kbd|sub|sup|b|i|u|em|strong|mark|details|summary)\s*\/?>)(?=\/?[a-z][\w-]*[\s/>])/gi
+
+/** `![alt][ref]` images whose definition is a remote URL, rewritten to the inline form `![alt](url)`. */
+function inlineRemoteRefs(text: string): string {
+  const defs = new Map<string, string>()
+
+  for (const match of text.matchAll(REF_DEFINITION)) {
+    defs.set(match[1]!.trim().toLowerCase(), match[2]!)
+  }
+
+  if (!defs.size) {
+    return text
+  }
+
+  const code = codeRanges(text)
+
+  return text.replace(REF_IMAGE, (whole, alt: string, ref: string, offset: number) => {
+    const url = defs.get((ref || alt).trim().toLowerCase())
+
+    return url && REMOTE_IMAGE.test(url) && !inRanges(code, offset) ? `![${alt}](${url})` : whole
+  })
+}
+
+/**
+ * Markdown that cannot start a network request on its own: raw HTML (`<img>`, `<video>`, `<iframe>`,
+ * a `style` that loads a background, …) is escaped to text, apart from bare formatting tags.
+ * Autolinks (`<https://…>`) and code are left alone.
+ */
+export function withoutRawHtml(text: string): string {
+  const code = codeRanges(text)
+
+  return text.replace(RAW_TAG, (whole, offset: number) => (inRanges(code, offset) ? whole : '&lt;'))
+}
 
 /**
  * Split note text into markdown runs and the pieces the preview renders itself: local images
- * (`![[pic.png|300]]`, `![alt](img/pic.png)`) and note embeds (`![[Other note#Heading]]`).
- * Remote/data image links and anything inside code stay in the markdown run.
+ * (`![[pic.png|300]]`, `![alt](img/pic.png)`), remote images (`![alt](https://…)`, also in the
+ * `![alt][ref]` form) and note embeds (`![[Other note#Heading]]`). Data-URL images and anything
+ * inside code stay in the markdown run.
  */
-export function splitPreview(text: string): PreviewSegment[] {
+export function splitPreview(source: string): PreviewSegment[] {
+  const text = inlineRemoteRefs(source)
   const code = codeRanges(text)
   const out: PreviewSegment[] = []
   let cursor = 0
@@ -482,9 +522,11 @@ export function splitPreview(text: string): PreviewSegment[] {
   for (const match of text.matchAll(EMBED)) {
     const start = match.index
     const wiki = match[1] !== undefined
-    const target = (wiki ? match[1]! : decodeUri(match[5]!.trim().replace(/\s+"[^"]*"$/, ''))).trim()
+    const raw = wiki ? '' : match[5]!.trim().replace(/\s+"[^"]*"$/, '')
+    const remote = !wiki && REMOTE_IMAGE.test(raw)
+    const target = (wiki ? match[1]! : decodeUri(raw)).trim()
 
-    if (inRanges(code, start) || (!wiki && (REMOTE.test(target) || !isImageName(target)))) {
+    if (inRanges(code, start) || (!wiki && !remote && (REMOTE.test(target) || !isImageName(target)))) {
       continue
     }
 
@@ -492,7 +534,9 @@ export function splitPreview(text: string): PreviewSegment[] {
       out.push({ kind: 'md', text: text.slice(cursor, start) })
     }
 
-    if (wiki && !isImageName(target)) {
+    if (remote) {
+      out.push({ alt: match[4]!, kind: 'remote', url: raw })
+    } else if (wiki && !isImageName(target)) {
       out.push({ anchor: match[2]!.slice(1).trim() || null, kind: 'embed', target })
     } else {
       const size = wiki ? Number(match[3]!.slice(1).split('x')[0]) : 0
