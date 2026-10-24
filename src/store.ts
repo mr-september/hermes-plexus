@@ -47,7 +47,6 @@ export interface OpenNote {
   /** The text last read from / written to disk — the baseline for conflict checks. */
   base: string
   draft: string
-  editable: boolean
   error?: string
   /** Remounts the editor when the buffer is replaced from outside. */
   generation: number
@@ -374,7 +373,6 @@ export class VaultStore {
         {
           base: '',
           draft: '',
-          editable: false,
           generation: 0,
           path: note.path,
           rel: note.rel,
@@ -398,7 +396,6 @@ export class VaultStore {
     this.patchTab(rel, {
       base: res.text,
       draft: res.text,
-      editable: res.editable,
       error: undefined,
       generation: this.now(),
       status: 'ready'
@@ -496,7 +493,7 @@ export class VaultStore {
 
     const tab = this.state.tabs.find(item => item.rel === rel)
 
-    if (!tab || tab.status === 'loading' || !tab.editable || tab.draft === tab.base) {
+    if (!tab || tab.status === 'loading' || tab.draft === tab.base) {
       return true
     }
 
@@ -633,7 +630,7 @@ export class VaultStore {
 
       const current = await readNote(this.fs, note.path)
 
-      if (!current.ok || !current.editable) {
+      if (!current.ok) {
         skipped.push(noteTitle(rel))
 
         continue

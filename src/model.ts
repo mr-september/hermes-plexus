@@ -48,6 +48,16 @@ export function relativeTo(root: string, abs: string): null | string {
   return target.toLowerCase().startsWith(`${base.toLowerCase()}/`) ? target.slice(base.length + 1) : null
 }
 
+/**
+ * A Hermes `@file:` reference to `path`. The composer reads a bare value up to the next space, so a
+ * path with whitespace is quoted with a quote character the path does not contain.
+ */
+export function fileRef(path: string): string {
+  const quote = /\s/.test(path) ? ['`', '"', "'"].find(q => !path.includes(q)) : undefined
+
+  return `@file:${quote ? `${quote}${path}${quote}` : path}`
+}
+
 export const noteTitle = (rel: string): string => (rel.split('/').pop() ?? rel).replace(/\.md$/i, '')
 
 export const noteFolder = (rel: string): string => (rel.includes('/') ? rel.slice(0, rel.indexOf('/')) : '')

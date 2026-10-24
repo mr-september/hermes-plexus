@@ -7,6 +7,7 @@ import {
   clampSplit,
   extractTags,
   extractWikilinks,
+  fileRef,
   filterGraph,
   findAnchorLine,
   folderHues,
@@ -25,6 +26,14 @@ import {
   wikilinksToMarkdown,
   withoutRawHtml
 } from './model'
+
+describe('fileRef', () => {
+  it('quotes a path with spaces so the composer reads it whole, and leaves plain paths bare', () => {
+    expect(fileRef('C:\\Notes\\a.md')).toBe('@file:C:\\Notes\\a.md')
+    expect(fileRef('C:\\My Vault\\a.md')).toBe('@file:`C:\\My Vault\\a.md`')
+    expect(fileRef("/home/x/it`s a \"vault\"/a.md")).toBe("@file:'/home/x/it`s a \"vault\"/a.md'")
+  })
+})
 
 describe('relativeTo', () => {
   it('strips a Windows root case-insensitively and normalises slashes', () => {

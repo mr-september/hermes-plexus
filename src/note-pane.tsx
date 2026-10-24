@@ -4,7 +4,7 @@ import { Codicon, host, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { Editor } from './editor'
 import { PLUGIN_ID } from './i18n'
-import { noteTitle } from './model'
+import { fileRef, noteTitle } from './model'
 import { NotePreview, type PreviewContext } from './preview'
 import type { OpenNote } from './store'
 
@@ -47,12 +47,12 @@ export function NotePane(props: NotePaneProps) {
     item.saving ? t('note.saving') : item.draft !== item.base ? t('note.unsaved') : item.status === 'ready' ? t('note.saved') : ''
 
   const addToChat = (item: OpenNote) => {
-    void host.composer?.insertText(null, `@file:${item.path}`, { mode: 'inline' })
+    void host.composer?.insertText(null, fileRef(item.path), { mode: 'inline' })
   }
 
   return (
     <div className="vc-pane">
-      <div aria-label="Open notes" className="vc-tabs" role="tablist">
+      <div aria-label={t('note.openNotes')} className="vc-tabs" role="tablist">
         {notes.map(item => (
           <div aria-selected={item.rel === active} className="vc-tab" key={item.rel} role="tab">
             <button onClick={() => props.onActivate(item.rel)} title={item.rel} type="button">
@@ -97,12 +97,11 @@ export function NotePane(props: NotePaneProps) {
               {note.error}
             </div>
           )}
-          {!note.editable && note.status === 'ready' && <div className="vc-banner vc-dim">{t('note.readOnly')}</div>}
 
           <div className="vc-body">
             {note.status === 'loading' ? (
               <div className="vc-banner vc-dim">{t('note.loading')}</div>
-            ) : preview.has(note.rel) || !note.editable ? (
+            ) : preview.has(note.rel) ? (
               <NotePreview
                 anchor={jump?.anchor}
                 ctx={props.preview}

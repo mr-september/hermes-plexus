@@ -196,7 +196,12 @@ async function capture(scene, theme, file, { extra = '', size = DEFAULT_SIZE } =
   } finally {
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
     await sleep(300)
-    rmSync(profile, { force: true, recursive: true, maxRetries: 3 })
+
+    try {
+      rmSync(profile, { force: true, recursive: true, maxRetries: 3 })
+    } catch {
+      // Windows can keep the browser profile locked a moment longer; it lives in the OS temp folder.
+    }
   }
 }
 

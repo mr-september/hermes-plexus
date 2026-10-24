@@ -124,7 +124,7 @@ node scripts/screenshots.mjs      # re-renders docs/screenshots from the demo va
 
 ```
 src/                  the plugin: model.ts (links, tags, graph, rewriting), store.ts (scanning, tabs, file
-                      operations), vault-fs.ts (the disk door), graph-view.tsx, editor.tsx, preview.tsx, …
+                      operations), vault-fs.ts (the disk door), files.ts (the `ctx.files` adapter), graph-view.tsx, editor.tsx, preview.tsx, …
 desktop/plugin.js     the built bundle Hermes loads (committed)
 demo/                 fictional demo vault and the screenshot harness
 docs/screenshots/     README images

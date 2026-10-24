@@ -15,6 +15,10 @@ function relativeTo(root, abs) {
   const target = normalizeSlashes(abs);
   return target.toLowerCase().startsWith(`${base2.toLowerCase()}/`) ? target.slice(base2.length + 1) : null;
 }
+function fileRef(path) {
+  const quote = /\s/.test(path) ? ["`", '"', "'"].find((q) => !path.includes(q)) : void 0;
+  return `@file:${quote ? `${quote}${path}${quote}` : path}`;
+}
 var noteTitle = (rel) => (rel.split("/").pop() ?? rel).replace(/\.md$/i, "");
 var noteFolder = (rel) => rel.includes("/") ? rel.slice(0, rel.indexOf("/")) : "";
 var parentDir = (rel) => rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
@@ -472,7 +476,7 @@ function vaultFsFrom(files) {
 // src/i18n.ts
 var PLUGIN_ID = "hermes-plexus";
 var en = {
-  common: { cancel: "Cancel", close: "Close", delete: "Delete", rename: "Rename" },
+  common: { close: "Close", rename: "Rename" },
   empty: {
     chooseHint: "Choose the folder that holds your notes.",
     chooseVault: "Choose vault folder\u2026",
@@ -486,10 +490,8 @@ var en = {
     graphLabel: "Note graph. Arrow keys move between linked notes, Enter opens the selected note.",
     local: "Local graph (this note and its neighbours)",
     orphans: "Show unlinked notes",
-    pin: "Pin node",
     search: "Filter notes\u2026 (#tag)",
-    stats: (notes, links) => `${notes} notes \xB7 ${links} links`,
-    unpin: "Unpin node"
+    stats: (notes, links) => `${notes} notes \xB7 ${links} links`
   },
   note: {
     addToChat: "Add to chat",
@@ -497,9 +499,9 @@ var en = {
     changedOnDisk: "Changed on disk since it was opened",
     edit: "Edit",
     loading: "Loading\u2026",
+    openNotes: "Open notes",
     overwrite: "Overwrite",
     preview: "Preview",
-    readOnly: "Too large or not text \u2014 shown read-only.",
     reload: "Reload from disk",
     saved: "Saved",
     saving: "Saving\u2026",
@@ -527,7 +529,6 @@ var en = {
     newNote: "New note",
     newNoteHere: "New note here",
     rescan: "Rescan vault",
-    reveal: "Reveal in file tree",
     showArchive: "Show skipped folders",
     trash: "Move to trash"
   },
@@ -535,8 +536,7 @@ var en = {
     noteLink: (name2) => `Open "${name2}" in Vault`,
     open: "Open Vault",
     statusbarToggle: "Vault button",
-    title: "Vault",
-    touched: "Recently changed by something else"
+    title: "Vault"
   },
   preview: {
     embedMissing: (name2) => `Embedded note not found: ${name2}`,
@@ -701,7 +701,7 @@ async function readNote(fs, path) {
     if (!("text" in res)) {
       return fail(res.message || res.error);
     }
-    return { editable: !res.truncated && !res.binary, ok: true, text: res.text };
+    return { ok: true, text: res.text };
   } catch (error) {
     return fail(error);
   }
@@ -755,9 +755,6 @@ async function moveNote(fs, from, destDir) {
     const source = await readNote(fs, from);
     if (!source.ok) {
       return source;
-    }
-    if (!source.editable) {
-      return fail("This note is too large to move safely");
     }
     if ((await readNote(fs, to)).ok) {
       return fail(`"${name2}" already exists in the destination`);
@@ -1122,7 +1119,6 @@ var VaultStore = class {
         {
           base: "",
           draft: "",
-          editable: false,
           generation: 0,
           path: note.path,
           rel: note.rel,
@@ -1142,7 +1138,6 @@ var VaultStore = class {
     this.patchTab(rel, {
       base: res.text,
       draft: res.text,
-      editable: res.editable,
       error: void 0,
       generation: this.now(),
       status: "ready"
@@ -1214,7 +1209,7 @@ var VaultStore = class {
   async save(rel, force = false) {
     clearTimeout(this.timers.get(rel));
     const tab = this.state.tabs.find((item) => item.rel === rel);
-    if (!tab || tab.status === "loading" || !tab.editable || tab.draft === tab.base) {
+    if (!tab || tab.status === "loading" || tab.draft === tab.base) {
       return true;
     }
     this.patchTab(rel, { saving: true });
@@ -1308,7 +1303,7 @@ var VaultStore = class {
         continue;
       }
       const current = await readNote(this.fs, note.path);
-      if (!current.ok || !current.editable) {
+      if (!current.ok) {
         skipped.push(noteTitle(rel));
         continue;
       }
@@ -22083,10 +22078,10 @@ function NotePane(props) {
   };
   const status = (item) => item.saving ? t2("note.saving") : item.draft !== item.base ? t2("note.unsaved") : item.status === "ready" ? t2("note.saved") : "";
   const addToChat = (item) => {
-    void host.composer?.insertText(null, `@file:${item.path}`, { mode: "inline" });
+    void host.composer?.insertText(null, fileRef(item.path), { mode: "inline" });
   };
   return /* @__PURE__ */ jsxs5("div", { className: "vc-pane", children: [
-    /* @__PURE__ */ jsx6("div", { "aria-label": "Open notes", className: "vc-tabs", role: "tablist", children: notes.map((item) => /* @__PURE__ */ jsxs5("div", { "aria-selected": item.rel === active, className: "vc-tab", role: "tab", children: [
+    /* @__PURE__ */ jsx6("div", { "aria-label": t2("note.openNotes"), className: "vc-tabs", role: "tablist", children: notes.map((item) => /* @__PURE__ */ jsxs5("div", { "aria-selected": item.rel === active, className: "vc-tab", role: "tab", children: [
       /* @__PURE__ */ jsx6("button", { onClick: () => props.onActivate(item.rel), title: item.rel, type: "button", children: noteTitle(item.rel) }),
       item.draft !== item.base && /* @__PURE__ */ jsx6("span", { "aria-label": t2("note.unsaved"), className: "vc-unsaved" }),
       /* @__PURE__ */ jsx6("button", { "aria-label": t2("common.close"), onClick: () => props.onClose(item.rel), title: t2("common.close"), type: "button", children: /* @__PURE__ */ jsx6(Codicon3, { name: "close", size: "0.75rem" }) })
@@ -22104,8 +22099,7 @@ function NotePane(props) {
         /* @__PURE__ */ jsx6("button", { className: "vc-pill", onClick: () => props.onSave(note.rel, true), type: "button", children: t2("note.overwrite") })
       ] }),
       note.status === "error" && /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-danger", role: "alert", children: note.error }),
-      !note.editable && note.status === "ready" && /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-dim", children: t2("note.readOnly") }),
-      /* @__PURE__ */ jsx6("div", { className: "vc-body", children: note.status === "loading" ? /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-dim", children: t2("note.loading") }) : preview.has(note.rel) || !note.editable ? /* @__PURE__ */ jsx6(
+      /* @__PURE__ */ jsx6("div", { className: "vc-body", children: note.status === "loading" ? /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-dim", children: t2("note.loading") }) : preview.has(note.rel) ? /* @__PURE__ */ jsx6(
         NotePreview,
         {
           anchor: jump?.anchor,

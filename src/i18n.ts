@@ -7,7 +7,7 @@
 export const PLUGIN_ID = 'hermes-plexus'
 
 export const en = {
-  common: { cancel: 'Cancel', close: 'Close', delete: 'Delete', rename: 'Rename' },
+  common: { close: 'Close', rename: 'Rename' },
   empty: {
     chooseHint: 'Choose the folder that holds your notes.',
     chooseVault: 'Choose vault folder…',
@@ -21,10 +21,8 @@ export const en = {
     graphLabel: 'Note graph. Arrow keys move between linked notes, Enter opens the selected note.',
     local: 'Local graph (this note and its neighbours)',
     orphans: 'Show unlinked notes',
-    pin: 'Pin node',
     search: 'Filter notes… (#tag)',
-    stats: (notes: number, links: number) => `${notes} notes · ${links} links`,
-    unpin: 'Unpin node'
+    stats: (notes: number, links: number) => `${notes} notes · ${links} links`
   },
   note: {
     addToChat: 'Add to chat',
@@ -32,9 +30,9 @@ export const en = {
     changedOnDisk: 'Changed on disk since it was opened',
     edit: 'Edit',
     loading: 'Loading…',
+    openNotes: 'Open notes',
     overwrite: 'Overwrite',
     preview: 'Preview',
-    readOnly: 'Too large or not text — shown read-only.',
     reload: 'Reload from disk',
     saved: 'Saved',
     saving: 'Saving…',
@@ -62,7 +60,6 @@ export const en = {
     newNote: 'New note',
     newNoteHere: 'New note here',
     rescan: 'Rescan vault',
-    reveal: 'Reveal in file tree',
     showArchive: 'Show skipped folders',
     trash: 'Move to trash'
   },
@@ -70,8 +67,7 @@ export const en = {
     noteLink: (name: string) => `Open "${name}" in Vault`,
     open: 'Open Vault',
     statusbarToggle: 'Vault button',
-    title: 'Vault',
-    touched: 'Recently changed by something else'
+    title: 'Vault'
   },
   preview: {
     embedMissing: (name: string) => `Embedded note not found: ${name}`,

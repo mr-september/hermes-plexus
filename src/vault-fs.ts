@@ -110,8 +110,6 @@ export async function scanVault(
 }
 
 export interface NoteText {
-  /** False when the file came back truncated or binary. */
-  editable: boolean
   text: string
 }
 
@@ -123,7 +121,7 @@ export async function readNote(fs: VaultFs, path: string): Promise<Result<NoteTe
       return fail(res.message || res.error)
     }
 
-    return { editable: !res.truncated && !res.binary, ok: true, text: res.text }
+    return { ok: true, text: res.text }
   } catch (error) {
     return fail(error)
   }
@@ -196,10 +194,6 @@ export async function moveNote(fs: VaultFs, from: string, destDir: string): Prom
 
     if (!source.ok) {
       return source
-    }
-
-    if (!source.editable) {
-      return fail('This note is too large to move safely')
     }
 
     if ((await readNote(fs, to)).ok) {

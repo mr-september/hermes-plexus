@@ -16,10 +16,8 @@ export interface DirEntry {
 }
 
 export interface ReadFileResult {
-  binary?: boolean
   path: string
   text: string
-  truncated?: boolean
 }
 
 export interface ReadFileError {
