@@ -14,8 +14,19 @@ const gap = (a: { r: number; x: number; y: number }, b: { r: number; x: number; 
 function expectSound(geometry: Geometry) {
   for (const region of geometry.regions.values()) {
     const kids = region.children.map(id => geometry.regions.get(id)!)
+    const inContent = (d: { r: number; x: number; y: number }) =>
+      expect(Math.hypot(d.x - region.content.x, d.y - region.content.y) + d.r).toBeLessThanOrEqual(region.content.r + EPS)
+
+    // The label band: the content sits inside the region and touches its bottom edge, so the crescent above it is free.
+    expect(Math.hypot(region.content.x - region.x, region.content.y - region.y) + region.content.r).toBeLessThanOrEqual(region.r + EPS)
+
+    if (region.id !== '') {
+      expect(region.content.y - region.y + region.content.r).toBeCloseTo(region.r, 6)
+      expect(region.content.r).toBeLessThan(region.r)
+    }
 
     for (const kid of kids) {
+      inContent(kid)
       expect(Math.hypot(kid.x - region.x, kid.y - region.y) + kid.r).toBeLessThanOrEqual(region.r + EPS)
       expect(kid.parent).toBe(region.id)
     }
@@ -23,6 +34,7 @@ function expectSound(geometry: Geometry) {
     const own = region.compartment
 
     if (own) {
+      inContent(own)
       expect(Math.hypot(own.x - region.x, own.y - region.y) + own.r).toBeLessThanOrEqual(region.r + EPS)
     }
 

@@ -47,6 +47,10 @@ const FIT_CAP = 1.8
 
 const hsl = (hue: number, lightness: number): string => `hsl(${hue} 62% ${lightness}%)`
 
+/** Whether the box lies wholly outside the disc grown by `margin`. */
+const rectClearOf = (box: readonly [number, number, number, number], disc: { r: number; x: number; y: number }, margin: number): boolean =>
+  Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin
+
 export interface GraphViewProps {
   cluster: ClusterMode
   /** The whole vault's graph. Nested region geometry comes from it, so filters never repack the map. Defaults to `graph`. */
@@ -245,14 +249,16 @@ export function GraphView(props: GraphViewProps) {
         const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r
         const dy = Math.max(3 / k, room)
 
-        if (room < region.r || forced) {
-          const box: [number, number, number, number] = [
-            region.x - width / 2,
-            region.y - region.r + dy,
-            region.x + width / 2,
-            region.y - region.r + dy + fontPx * 1.15
-          ]
+        const box: [number, number, number, number] = [
+          region.x - width / 2,
+          region.y - region.r + dy,
+          region.x + width / 2,
+          region.y - region.r + dy + fontPx * 1.15
+        ]
 
+        // The label belongs in the crescent above the content disc, where no note or child region can be.
+        // It is drawn unforced only while it fits there at this zoom, so it never sits on a note.
+        if (forced || (room < region.r && rectClearOf(box, region.content, 2 / k))) {
           if (forced || !labelPlaced.some(p => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
             labelPlaced.push(box)
             labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id })

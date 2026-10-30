@@ -44,14 +44,27 @@ beforeEach(() => {
       }) as DOMRect
   )
   HTMLElement.prototype.setPointerCapture = () => undefined
+  // Text is measured in the transformed (world) space at the font size the view set, as a real canvas does.
+  let fontPx = 11
+
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
     new Proxy(
       {},
       {
         get: (_target, name: string) =>
-          name === 'measureText' ? () => ({ width: 40 }) : (...args: unknown[]) => void calls.push([name, args]),
+          name === 'measureText'
+            ? (text: string) => ({ width: fontPx * 0.6 * text.length })
+            : (...args: unknown[]) => void calls.push([name, args]),
         // Property writes are recorded too, so a region disc (arc, then style writes, then fill) differs from a note disc (arc, fill).
-        set: (_target, name: string, value: unknown) => (calls.push(['set', [name, value]]), true)
+        set: (_target, name: string, value: unknown) => {
+          if (name === 'font') {
+            fontPx = Number.parseFloat(/(\d+(?:\.\d+)?(?:e-?\d+)?)px/.exec(String(value))?.[1] ?? '11')
+          }
+
+          calls.push(['set', [name, value]])
+
+          return true
+        }
       }
     ) as unknown as CanvasRenderingContext2D
   )
@@ -434,8 +447,8 @@ describe('GraphView nested folder regions', () => {
       expect(view.x).toBeCloseTo(400, 3)
       expect(view.y).toBeCloseTo(300, 3)
       expect(view.r).toBeCloseTo(252, 3)
-      // Deeper than the legacy 1.8 Fit cap and above the legacy zoom ceiling of 6: the shared limits allow it.
-      expect(view.k).toBeGreaterThan(6)
+      // Far past the 1.8 cap of the global Fit action (the ceiling's widening past 6 is covered in camera.test.ts).
+      expect(view.k).toBeGreaterThan(5)
     })
 
     it('shows the path to the camera, and a step of it (or Escape) frames the ancestor', async () => {

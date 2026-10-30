@@ -3097,6 +3097,7 @@ var COLLIDE_PAD = 4;
 var DENSITY = 0.4;
 var BUCKET_RATIO = 1.5;
 var REGION_PAD = 8;
+var LABEL_BAND = 0.14;
 var BUCKET_ORIGIN = Math.PI * (radiusOf({ degree: 0 }) + COLLIDE_PAD) ** 2;
 var EMPTY_GEOMETRY = {
   byDir: /* @__PURE__ */ new Map(),
@@ -3156,16 +3157,33 @@ function buildGeometry(radii) {
     ];
     if (items.length === 1) {
       const [only] = items;
-      return only.packed ? { ...only.packed, dirs: [dir, ...only.packed.dirs] } : { children: [], compartment: { dx: 0, dy: 0, r: own }, dirs: [dir], r: own };
+      if (only.packed) {
+        return { ...only.packed, dirs: [dir, ...only.packed.dirs] };
+      }
+      const band2 = dir === "" ? 0 : LABEL_BAND * own;
+      return {
+        children: [],
+        compartment: { dx: 0, dy: band2, r: own },
+        content: { dx: 0, dy: band2, r: own },
+        dirs: [dir],
+        r: own + band2
+      };
     }
     items.sort((a3, b) => b.r - a3.r || (a3.key < b.key ? -1 : a3.key > b.key ? 1 : 0));
     const circles = items.map((item) => ({ r: item.r + REGION_PAD, x: 0, y: 0 }));
     siblings_default(circles);
     const enclosure = enclose_default(circles);
-    const result = { children: [], compartment: null, dirs: [dir], r: enclosure.r };
+    const band = dir === "" ? 0 : LABEL_BAND * enclosure.r;
+    const result = {
+      children: [],
+      compartment: null,
+      content: { dx: 0, dy: band, r: enclosure.r },
+      dirs: [dir],
+      r: enclosure.r + band
+    };
     items.forEach((item, index2) => {
       const dx = circles[index2].x - enclosure.x;
-      const dy = circles[index2].y - enclosure.y;
+      const dy = circles[index2].y - enclosure.y + band;
       if (item.packed) {
         result.children.push({ dx, dy, packed: item.packed });
       } else {
@@ -3183,6 +3201,7 @@ function buildGeometry(radii) {
     const region = {
       children: [],
       compartment: null,
+      content: { r: packed.content.r, x: x3 + packed.content.dx, y: y3 + packed.content.dy },
       depth,
       dirs: packed.dirs,
       id,
@@ -3351,6 +3370,7 @@ var LABEL_MIN_PX = 40;
 var CURRENT_FRACTION = 0.25;
 var FIT_CAP = 1.8;
 var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
+var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
 function GraphView(props) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props;
   const nested = cluster === "nested";
@@ -3467,13 +3487,13 @@ function GraphView(props) {
         const half = width / 2 + 3 / k;
         const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
         const dy = Math.max(3 / k, room);
-        if (room < region.r || forced) {
-          const box = [
-            region.x - width / 2,
-            region.y - region.r + dy,
-            region.x + width / 2,
-            region.y - region.r + dy + fontPx * 1.15
-          ];
+        const box = [
+          region.x - width / 2,
+          region.y - region.r + dy,
+          region.x + width / 2,
+          region.y - region.r + dy + fontPx * 1.15
+        ];
+        if (forced || room < region.r && rectClearOf(box, region.content, 2 / k)) {
           if (forced || !labelPlaced.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
             labelPlaced.push(box);
             labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });

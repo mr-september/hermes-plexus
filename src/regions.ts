@@ -26,8 +26,10 @@ export interface Compartment extends Disc {
 /** One drawn folder region. A chain of folders with no notes and a single child is one region. */
 export interface Region extends Disc {
   children: string[]
-  /** The notes' disc; coincides with the region itself when the folder has no subfolders. */
+  /** The notes' disc; coincides with `content` when the folder has no subfolders. */
   compartment: Compartment | null
+  /** Disc holding everything inside the region (children and notes); the crescent between it and the region is the label band. */
+  content: Disc
   depth: number
   /** The chain of folders this region stands for, outermost first; the last one is `id`. */
   dirs: string[]
@@ -60,6 +62,12 @@ const DENSITY = 0.4
 const BUCKET_RATIO = 1.5
 /** Gap kept between siblings (twice this) and between a child and its parent's edge. */
 const REGION_PAD = 8
+/**
+ * Label band: the region disc is its content disc grown by this fraction of the content radius, with the content
+ * pushed down to touch the bottom edge, leaving a crescent at the top (thickness twice this at the centre) that
+ * only the region's label may occupy. Tuned by eye.
+ */
+const LABEL_BAND = 0.14
 const BUCKET_ORIGIN = Math.PI * (radiusOf({ degree: 0 }) + COLLIDE_PAD) ** 2
 
 export const EMPTY_GEOMETRY: Geometry = {
@@ -107,6 +115,7 @@ export const geometrySignature = (radii: ReadonlyMap<string, number>): string =>
 interface Packed {
   children: { dx: number; dy: number; packed: Packed }[]
   compartment: { dx: number; dy: number; r: number } | null
+  content: { dx: number; dy: number; r: number }
   dirs: string[]
   r: number
 }
@@ -159,9 +168,19 @@ export function buildGeometry(radii: ReadonlyMap<string, number>): Geometry {
 
       // A folder with notes and nothing else is its compartment; a folder with one child and no notes
       // is that child (a chain).
-      return only!.packed
-        ? { ...only!.packed, dirs: [dir, ...only!.packed.dirs] }
-        : { children: [], compartment: { dx: 0, dy: 0, r: own! }, dirs: [dir], r: own! }
+      if (only!.packed) {
+        return { ...only!.packed, dirs: [dir, ...only!.packed.dirs] }
+      }
+
+      const band = dir === '' ? 0 : LABEL_BAND * own!
+
+      return {
+        children: [],
+        compartment: { dx: 0, dy: band, r: own! },
+        content: { dx: 0, dy: band, r: own! },
+        dirs: [dir],
+        r: own! + band
+      }
     }
 
     // Largest first so the big discs sit at the centre; the key makes the order total.
@@ -172,11 +191,19 @@ export function buildGeometry(radii: ReadonlyMap<string, number>): Geometry {
     packSiblings(circles)
 
     const enclosure = packEnclose(circles)
-    const result: Packed = { children: [], compartment: null, dirs: [dir], r: enclosure.r }
+    const band = dir === '' ? 0 : LABEL_BAND * enclosure.r
+
+    const result: Packed = {
+      children: [],
+      compartment: null,
+      content: { dx: 0, dy: band, r: enclosure.r },
+      dirs: [dir],
+      r: enclosure.r + band
+    }
 
     items.forEach((item, index) => {
       const dx = circles[index]!.x - enclosure.x
-      const dy = circles[index]!.y - enclosure.y
+      const dy = circles[index]!.y - enclosure.y + band
 
       if (item.packed) {
         result.children.push({ dx, dy, packed: item.packed })
@@ -199,6 +226,7 @@ export function buildGeometry(radii: ReadonlyMap<string, number>): Geometry {
     const region: Region = {
       children: [],
       compartment: null,
+      content: { r: packed.content.r, x: x + packed.content.dx, y: y + packed.content.dy },
       depth,
       dirs: packed.dirs,
       id,
