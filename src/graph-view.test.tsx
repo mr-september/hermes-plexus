@@ -334,6 +334,13 @@ describe('GraphView nested folder regions', () => {
     expectContainedThroughout(0, tree, geometry)
     // Regions are drawn first, beneath the notes.
     expect(regionDiscs(lastPaint()).length).toBeGreaterThan(3)
+
+    // The vault root is geometry only: its enclosing disc is not drawn, the top-level folders' discs are.
+    const radii = regionDiscs(lastPaint()).map(([, , r]) => r)
+    const drawn = (r: number) => radii.some(item => Math.abs(item - r) < 1e-6)
+
+    expect(drawn(geometry.regions.get('')!.r)).toBe(false)
+    expect(drawn(geometry.regions.get('A')!.r)).toBe(true)
   })
 
   it('keeps containment through a layout-mode switch both ways, and never carries positions across it', async () => {

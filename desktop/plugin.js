@@ -3474,7 +3474,7 @@ function GraphView(props) {
         [left, bottom],
         [right, bottom]
       ].every(([px, py]) => Math.hypot(px - region.x, py - region.y) < region.r);
-      if (!covers) {
+      if (!covers && region.id !== "") {
         disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false);
       }
       const comp = region.compartment;

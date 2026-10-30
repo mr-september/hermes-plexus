@@ -231,7 +231,9 @@ export function GraphView(props: GraphViewProps) {
       ].every(([px, py]) => Math.hypot(px! - region.x, py! - region.y) < region.r)
 
       // Above the band (the region has outgrown the viewport) only the outline — which is off screen — remains.
-      if (!covers) {
+      // The vault root stays in the geometry (it holds the packing together and anchors the camera fits and
+      // the breadcrumb) but is not drawn: its disc is only the enclosure of the top-level folders.
+      if (!covers && region.id !== '') {
         disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false)
       }
 
