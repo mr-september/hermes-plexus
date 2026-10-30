@@ -29,7 +29,7 @@ Every folder region presents the same interaction at every depth, so the hierarc
 - Framing and manual zoom share geometry-derived limits that cover both ends of the hierarchy. The zoom floor is the smaller of the current floor (0.1) and the magnification needed to fit the whole map; the ceiling is the larger of the current ceiling (6) and the magnification needed to fit the smallest compartment holding a note. Compute these fits with viewport padding, update them on geometry or viewport changes, and handle empty geometry and zero-sized viewports without invalid values. The existing 1.8 cap remains specific to the global Fit action; it does not cap folder framing. Whole-map and folder framing respect the shared limits and centre the requested region.
 - Going outward is the same gesture on the ancestor: click an element of the displayed path to frame that ancestor, or press Escape to frame the parent of the currently framed folder. The path display is the persistent way back out.
 - Notes keep their actions: click opens, Shift+click pins, drag moves. Pointer priority is note, then region label, then region area; a drag that starts on an empty region area pans as it does today, and a click there does nothing.
-- Subtree hiding is deferred. It is not part of the contract until a reversible control for it is specified.
+- Subtree hiding is specified in "Subtree hiding (proposal)" below and is not implemented; until it is, only top-level folders can be hidden, from the legend.
 
 Keyboard navigation of folders is not specified here; the existing arrow-key hop between linked notes is unchanged.
 
@@ -145,6 +145,57 @@ Degradation, if measurement shows a cliff: draw regions only on settle while the
 2. The bucket ratio and padding. Start with an upward-rounded geometric bucket and tune by eye on a real nested vault; look for both frequent map shifts and visibly empty compartments.
 3. Whether the spatial map stays recognisable across repacks. This, and the continuity of framing and zooming across depths, is what M2 is meant to judge; it matters more to the feel than boundary shape or folder-level forces.
 
+
+## Subtree hiding (proposal)
+
+Status: specified, not implemented. Facts about current code: the graph hides notes whose top-level `folder` is in `hiddenFolders` (`filterGraph` in `src/model.ts`), the set is the per-vault `hiddenInGraph` list in `prefs.ts`, toggled by `store.ts` and surfaced only as one legend chip per top-level folder. Geometry is computed from the full graph, so hiding never moves a region, and a region with no shown note is already drawn faintly.
+
+### Goal and constraints
+
+Let the user hide any folder's subtree at any depth, and always see how to get it back. Constraints taken from the rest of this document: the map does not move when notes are hidden; the interaction is the same at every depth; every piece of persistent state has a visible control; an action never depends on a hover that the pointer must leave to reach the control.
+
+### State
+
+`hiddenInGraph` becomes a set of folder paths with prefix semantics: a note is hidden if its `dir` equals a hidden path or lies under it. Existing entries are top-level folder names, which are valid paths, so no migration is needed. The empty path `''` keeps its current meaning, the notes directly in the vault root, and does not hide the whole vault. A region is identified by its deepest folder, so hiding a chained region `A/B/C` stores `A/B/C`.
+
+Entries are stored as given and never normalised. Hiding `A` while `A/B` is already hidden keeps both entries; showing `A` later restores `A` but leaves `A/B` hidden, which is what the user last asked for about `A/B`. Hiding a path that an existing entry already covers adds nothing and is reported as "already hidden by A". Effective visibility is computed by testing a folder's ancestors against the set.
+
+### Controls
+
+- Hide or Show button, in the path bar beside the breadcrumb, acting on the framed region (the camera's current folder), never on the hovered one. The reason is the pointer: moving to a button outside the canvas clears hover, and the breadcrumb then reverts to the camera's folder, so a hover-targeted button would act on a different folder than the one the user pointed at. The workflow is therefore frame, then act, which also matches click-to-frame as the primary gesture. The button is absent when the vault root region is framed.
+- The button's label and target follow the framed region's state: not hidden gives "Hide A/B" (n notes); hidden by its own entry gives "Show A/B"; hidden because an ancestor entry covers it gives "Show A", targeting that ancestor, since it is the entry whose removal reveals this folder.
+- Keyboard: `H` on the focused canvas does the same as the button. The action is announced through an `aria-live` region ("Hid A/B, 12 notes"), which is the only feedback besides the state changes below.
+- Legend: the existing top-level chips keep working and are the same mechanism (a top-level entry is a depth-one path). A "Hidden" group is appended whenever any entry deeper than the top level exists, with one chip per such entry showing its path and the count of notes it hides, a click on which shows it. Entries whose folder no longer exists are shown dimmed as "not found" and can be removed, so no persisted entry is ever without a control. A "Show all" chip appears when there are two or more entries.
+
+### On the canvas
+
+A region that is effectively hidden is drawn with a dashed outline and its label suffixed "(hidden)", distinct from the faint, solid look of a region that is merely empty or fully filtered by search. Its disc keeps its place, so the map does not shift and the region can still be framed, which is how it is found again on the canvas. Descendant regions of a hidden region are hidden the same way. A region with some, but not all, subtrees hidden keeps its normal look.
+
+### Effects on the rest of the system
+
+- Filtering: `filterGraph` replaces the top-level lookup with an ancestor test, memoised per distinct `dir` for the duration of one filter call, so the added work is proportional to the number of distinct folders times depth plus one lookup per note. This is reasoning, not measurement.
+- Layout: hidden notes leave the simulation exactly as hidden top-level notes do today; remaining notes keep their positions, compartments and the camera do not change, and no repack occurs.
+- Local graph and search: the hidden set applies in every view. A hidden note never appears, including in the local graph. If the open note is hidden, it stays open in the editor and simply has no node, as today for hidden top-level folders.
+- Modes: path entries filter in all cluster modes. The Hide and Show button needs regions and so exists only in nested mode, but the Hidden group is shown in every mode so state set in nested mode stays recoverable.
+- Empty result: hiding everything leaves the existing empty graph state, with the Hidden group as the way back.
+
+### Tests
+
+- Model: prefix semantics, including that `''` matches only root notes; a legacy top-level entry behaves as before; ancestor and descendant entries coexist, and showing the ancestor leaves the descendant hidden; a chained region hides its subtree; the nearest covering entry is the one reported.
+- Store: toggling adds and removes a path; persistence round-trips; a stale entry is retained until removed.
+- View: the button acts on the framed region and not on a hovered one (hover another region, then use the button); label and target for the three states; `H` and the button agree; the Hidden group lists every deeper entry and a stale entry; hiding changes neither the region geometry nor the camera.
+
+### Milestones
+
+- **S1, state and filter.** Path set in `model.ts`, `store.ts`, `prefs.ts`; tests above for model and store.
+- **S2, controls.** Path-bar button, `H`, the Hidden group and the dashed hidden-region look; view tests.
+- **S3, documentation.** README and a screenshot of a hidden subtree with the Hidden group.
+
+### Open questions
+
+1. Whether to add a transient undo affordance in addition to the always-visible chip. The chip is sufficient for reversibility; an undo toast adds a second control for the same state.
+2. A "solo" action (show only this folder's subtree) is the natural complement and is a different state (a single shown path rather than a hidden set); not specified here.
+3. Whether the Hide and Show button should also appear on the canvas next to the framed region's label. Start in the path bar, which is accessible and keeps the canvas free of hit-test conflicts; move it only if the prototype shows it is hard to find.
 
 ## Implementation record
 
