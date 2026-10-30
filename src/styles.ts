@@ -67,6 +67,10 @@ export const CSS = `
 .vc-toolbar input { width: 12rem; }
 .vc-toggle { padding: 1px 6px; color: var(--vc-dim); }
 .vc-toggle[data-on="true"] { color: var(--vc-accent); }
+.vc-crumbs { position: absolute; left: 8px; bottom: 26px; right: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px;
+  font-size: 0.6875rem; color: var(--vc-dim); pointer-events: none; }
+.vc-crumbs button { padding: 0 2px; pointer-events: auto; }
+.vc-crumbs button:last-of-type { color: var(--vc-strong); }
 .vc-footer { position: absolute; left: 8px; bottom: 6px; display: flex; align-items: center; gap: 8px; color: var(--vc-dim);
   font-size: 0.6875rem; }
 .vc-split { cursor: col-resize; background: var(--vc-line); opacity: 0.6; }

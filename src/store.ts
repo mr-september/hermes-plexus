@@ -836,8 +836,19 @@ export class VaultStore {
     })
   }
 
-  /** Remember settled node positions; merged, so a local graph does not erase the rest of the layout. */
-  setPositions(positions: Record<string, [number, number]>): void {
-    this.updateVault({ positions: { ...this.state.vault.positions, ...positions } })
+  /**
+   * Remember settled absolute positions of the folder/none layouts; merged, so a local graph does not erase
+   * the rest of the layout. Positions of another layout are replaced, not merged into.
+   */
+  setPositions(mode: 'folder' | 'none', positions: Record<string, [number, number]>): void {
+    const { positions: saved, positionsMode } = this.state.vault
+    const same = positionsMode === undefined || positionsMode === mode
+
+    this.updateVault({ positions: { ...(same ? saved : {}), ...positions }, positionsMode: mode })
+  }
+
+  /** Remember settled compartment-relative positions of the nested layout (merged, like `setPositions`). */
+  setNestedPositions(positions: Record<string, [string, number, number]>): void {
+    this.updateVault({ nestedPositions: { ...this.state.vault.nestedPositions, ...positions } })
   }
 }

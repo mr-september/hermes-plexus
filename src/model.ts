@@ -12,6 +12,8 @@ export interface VaultNote {
 
 export interface GraphNode {
   degree: number
+  /** Full folder path (`A/B`), '' for notes at the vault root — the key of the folder tree. */
+  dir: string
   /** Top-level folder, '' for notes at the vault root — the cluster key. */
   folder: string
   id: string
@@ -282,6 +284,7 @@ export function buildGraph(notes: readonly NoteIndex[]): VaultGraph {
     edges,
     nodes: notes.map(note => ({
       degree: degree.get(note.rel) ?? 0,
+      dir: parentDir(note.rel),
       folder: noteFolder(note.rel),
       id: note.rel,
       tags: note.tags,
@@ -290,7 +293,10 @@ export function buildGraph(notes: readonly NoteIndex[]): VaultGraph {
   }
 }
 
-export const backlinksOf = (graph: VaultGraph, rel: string): string[] =>
+/** Drawn (and collision) radius of a note: grows with its degree. */
+export const radiusOf = (node: Pick<GraphNode, 'degree'>): number => 3 + Math.sqrt(node.degree) * 1.7
+
+export const backlinksOf =(graph: VaultGraph, rel: string): string[] =>
   graph.edges.filter(edge => edge.target === rel).map(edge => edge.source)
 
 /** The notes a given note links to or is linked from, within `depth` hops (the note itself included). */

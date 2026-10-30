@@ -17,9 +17,14 @@ export const en = {
   },
   graph: {
     clusterFolder: 'Cluster by folder',
+    clusterNested: 'Nested folder regions (notes stay inside their folder)',
     fit: 'Fit',
     graphLabel: 'Note graph. Arrow keys move between linked notes, Enter opens the selected note.',
     local: 'Local graph (this note and its neighbours)',
+    nestedHelp:
+      "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out.",
+    pathLabel: 'Folder path',
+    pathRoot: 'Vault',
     orphans: 'Show unlinked notes',
     search: 'Filter notes… (#tag)',
     stats: (notes: number, links: number) => `${notes} notes · ${links} links`

@@ -27,6 +27,7 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
 ## What it does
 
 - **A graph of your vault.** Notes are nodes and `[[wikilinks]]` are edges, clustered and coloured by top-level folder. Scroll to zoom, drag to pan or move a node, click to open, Shift+click to pin. The filter box dims everything that does not match (`#tag` works too), the target button shows just the open note and its neighbours, and the legend hides whole folders. Notes changed by something else, such as the agent, get a dashed halo for ten minutes.
+- **Nested folder regions (opt-in).** Set **Cluster graph by folder** to *Nested folder regions* and every folder becomes a translucent disc inside its parent, with its notes inside it; the map is laid out once from the whole vault, so filters, search and the local graph never move it. Click a region's label to zoom to that folder (the same gesture at every depth), click a step of the path at the bottom or press Escape to go back out, and scroll or drag as usual. A note cannot be dragged out of its own folder's region; that is the price of the guarantee that no note ever straddles another folder. Chains of folders with no notes and one child draw as one region (`A/B/C`).
 - **A file tree you can hide.** `.md` notes by folder, with new, rename, move to trash (recoverable) and drag-to-move. Moving or renaming rewrites the links that pointed at the note, keeping aliases, headings and embeds.
 - **A tabbed editor beside the graph.** Markdown source with autosave, `[[` autocomplete, Ctrl/⌘-click to follow a link (a missing target is created next to the current note), an Edit/Preview toggle and a backlinks list. The divider between graph and editor snaps to 0% or 100%, so either side can vanish.
 - **Real wikilinks.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` jump to the heading or block. Preview shows vault images (`![[pic.png|300]]`, `![alt](img/pic.png)`) and embeds a note or one of its sections (`![[Note#Heading]]`).
@@ -70,6 +71,19 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
   <tr>
     <td align="center"><sub>Filtering by <code>#sensors</code> dims the rest.</sub></td>
     <td align="center"><sub>Local graph: one note and its neighbours.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/nested-folders-dark.png">
+        <img src="docs/screenshots/nested-folders-light.png" alt="Nested folder regions: each folder a disc inside its parent, with its notes inside it, on a generated multi-level vault">
+      </picture>
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Nested folder regions (generated vault).</sub></td>
+    <td></td>
   </tr>
 </table>
 </div>
@@ -120,15 +134,16 @@ To try it without your own notes, choose `demo/vault` as the vault folder (or re
 npm test                          # builds desktop/plugin.js, then unit, component and bundle smoke tests
 npm run typecheck
 node scripts/screenshots.mjs      # re-renders docs/screenshots from the demo vault
+node scripts/bench.mjs            # layout cost and boundary crowding (add `paint` for canvas paint cost in headless Edge/Chrome)
 ```
 
 ```
 src/                  the plugin: model.ts (links, tags, graph, rewriting), store.ts (scanning, tabs, file
-                      operations), vault-fs.ts (the disk door), files.ts (the `ctx.files` adapter), graph-view.tsx, editor.tsx, preview.tsx, …
+                      operations), vault-fs.ts (the disk door), files.ts (the `ctx.files` adapter), graph-view.tsx, regions.ts (nested folder geometry), layout.ts (forces and note containment), camera.ts (framing and zoom limits), editor.tsx, preview.tsx, …
 desktop/plugin.js     the built bundle Hermes loads (committed)
 demo/                 fictional demo vault and the screenshot harness
 docs/screenshots/     README images
-scripts/              build.mjs, deploy.mjs, screenshots.mjs
+scripts/              build.mjs, deploy.mjs, screenshots.mjs, bench.mjs
 test/                 in-memory disk, stub SDK, bundle smoke test
 plugin.yaml           catalog manifest
 ```
@@ -164,4 +179,4 @@ Stars, bug reports and ideas for the graph help just as much.
 
 ## License and credits
 
-The code is [MIT](LICENSE) licensed. The built bundle includes [CodeMirror 6](https://codemirror.net/) (MIT) and [d3-force](https://github.com/d3/d3-force) (ISC); `@vscode/codicons` and `marked` are used only by the screenshot harness. "Obsidian" is a trademark of its owners; this project is not affiliated with or endorsed by them. Every person and result in the demo vault is fictional.
+The code is [MIT](LICENSE) licensed. The built bundle includes [CodeMirror 6](https://codemirror.net/) (MIT) and [d3-force](https://github.com/d3/d3-force) and [d3-hierarchy](https://github.com/d3/d3-hierarchy) (ISC); `@vscode/codicons` and `marked` are used only by the screenshot harness. "Obsidian" is a trademark of its owners; this project is not affiliated with or endorsed by them. Every person and result in the demo vault is fictional.

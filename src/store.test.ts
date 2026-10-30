@@ -226,6 +226,19 @@ describe('file operations', () => {
 })
 
 describe('persistence', () => {
+  it('keeps positions of each layout apart: merges within a layout, replaces on a change, never mixes nested offsets in', async () => {
+    await ready()
+    store.setPositions('folder', { 'A.md': [1, 2] })
+    store.setPositions('folder', { 'B.md': [3, 4] })
+    expect(store.get().vault.positions).toEqual({ 'A.md': [1, 2], 'B.md': [3, 4] })
+    store.setNestedPositions({ 'A.md': ['X', 0.1, 0.2] })
+    expect(store.get().vault.positions).toHaveProperty('A.md')
+    store.setPositions('none', { 'C.md': [5, 6] })
+    expect(store.get().vault.positions).toEqual({ 'C.md': [5, 6] })
+    expect(store.get().vault.positionsMode).toBe('none')
+    expect(store.get().vault.nestedPositions).toEqual({ 'A.md': ['X', 0.1, 0.2] })
+  })
+
   it('restores open tabs and the active note for the vault', async () => {
     await ready()
     store.open('Alpha.md')

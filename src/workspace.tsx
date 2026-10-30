@@ -225,17 +225,21 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
             ) : (
               <GraphView
                 cluster={prefs.cluster}
+                fullGraph={graph}
                 graph={shown}
                 hiddenFolders={hiddenInGraph}
                 labels={prefs.labels}
                 legendFolders={legendFolders}
                 onOpen={openRel}
-                onPositions={positions => store.setPositions(positions)}
+                nestedPositions={vault.nestedPositions}
+                onNestedPositions={positions => store.setNestedPositions(positions)}
+                onPositions={(mode, positions) => store.setPositions(mode, positions)}
                 onToggleFolder={folder => store.toggleFolderInGraph(folder)}
                 onTogglePin={rel => store.togglePin(rel)}
                 openRels={openRels}
                 pinned={pinned}
                 positions={vault.positions}
+                positionsMode={vault.positionsMode}
                 search={search}
                 selected={active}
                 touched={state.touched}

@@ -6,7 +6,7 @@
 
 import type { PluginStorage } from '@hermes/plugin-sdk'
 
-export type ClusterMode = 'folder' | 'none'
+export type ClusterMode = 'folder' | 'nested' | 'none'
 export type LabelMode = 'always' | 'auto' | 'never'
 
 export interface Prefs {
@@ -50,8 +50,18 @@ export interface VaultState {
   hiddenInGraph: string[]
   /** Open note tabs, by vault-relative path. */
   tabs: string[]
-  /** Last settled node positions, so the graph does not reshuffle on every open. */
+  /**
+   * Compartment-relative positions of the nested layout: the note's folder and its offset from that
+   * compartment's centre over the compartment's radius (see `Offset` in layout.ts). They follow a repack.
+   */
+  nestedPositions: Record<string, [string, number, number]>
+  /** Last settled absolute node positions of the folder/none layouts, so the graph does not reshuffle on every open. */
   positions: Record<string, [number, number]>
+  /**
+   * The layout `positions` belong to. Absent on positions saved before it was recorded; those are
+   * accepted by folder and none (as they always were) and never by nested.
+   */
+  positionsMode?: Exclude<ClusterMode, 'nested'>
   /** Nodes pinned in place. */
   pinned: string[]
 }
@@ -60,6 +70,7 @@ export const EMPTY_VAULT_STATE: VaultState = {
   active: null,
   expanded: [],
   hiddenInGraph: [],
+  nestedPositions: {},
   pinned: [],
   positions: {},
   tabs: []

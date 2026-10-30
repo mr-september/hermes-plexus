@@ -8,7 +8,8 @@ import { VaultStore } from '../../src/store'
 import { installStyles } from '../../src/styles'
 import { VaultWorkspace } from '../../src/workspace'
 import { translate } from './sdk'
-import vault from 'plexus-demo-vault'
+import { syntheticNotes } from '../synthetic'
+import demoVault from 'plexus-demo-vault'
 
 const ROOT = 'C:\\demo\\tidal-garden-vault'
 const params = new URLSearchParams(location.hash.slice(1))
@@ -16,6 +17,32 @@ const scene = params.get('scene') ?? 'graph'
 
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 installStyles()
+
+// The `nested` scene swaps the demo vault for a generated multi-level one (see demo/synthetic.ts), tuned from the URL hash.
+const nestedScene = scene === 'nested'
+const num = (key: string, fallback: number) => Number(params.get(key) ?? fallback)
+
+const TOP = ['Projects', 'Research', 'Concepts', 'People', 'Daily', 'Reading']
+const SUB = ['Field', 'Lab', 'Models', 'Notes', 'Drafts']
+
+const vault = nestedScene
+  ? {
+      files: Object.fromEntries(
+        syntheticNotes({
+          crossFraction: num('cross', 0.1),
+          depth: num('depth', 3),
+          branching: num('branching', 3),
+          folderName: (level, b) => (level === 0 ? TOP[b % TOP.length]! : `${SUB[(level + b) % SUB.length]}${level > 1 ? level : ''}`),
+          folderPerNote: params.get('per') === '1',
+          links: num('links', 2),
+          notes: num('n', 220),
+          seed: num('seed', 5),
+          skew: num('skew', 0.7)
+        }).map(note => [note.rel, note.content])
+      ),
+      images: {}
+    }
+  : demoVault
 
 const disk = new FakeDisk(ROOT, vault.files)
 
@@ -33,7 +60,11 @@ const storage = {
 
 const prefs = new PrefsStore(storage)
 
-prefs.set({ noteFrac: scene === 'graph' ? 0.5 : 0.44, treeOpen: params.get('tree') !== '0' })
+prefs.set({
+  cluster: nestedScene ? 'nested' : 'folder',
+  noteFrac: scene === 'graph' || nestedScene ? 0.5 : 0.44,
+  treeOpen: params.get('tree') !== '0'
+})
 prefs.useVault(ROOT)
 
 // Pre-seed per-vault view state so the scene starts the way the screenshot needs.
@@ -49,6 +80,7 @@ prefs.saveVault(ROOT, {
   active: open[scene]?.at(-1) ?? null,
   expanded: ['Projects', 'Research', 'Concepts'],
   hiddenInGraph: [],
+  nestedPositions: {},
   pinned: [],
   positions: {},
   tabs: open[scene] ?? []
