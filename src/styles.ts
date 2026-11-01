@@ -103,6 +103,11 @@ export const CSS = `
 .vc-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   font-size: 0.875rem; }
 .vc-btn { padding: 4px 12px; border: 1px solid var(--vc-line); }
+.vc-root .vc-empty .vc-btn { padding: 5px 16px; border: 1px solid var(--vc-line); }
+.vc-root .vc-empty .vc-btn[data-primary="true"] { border-color: var(--vc-accent); color: var(--vc-accent); }
+.vc-access { box-sizing: border-box; height: 100%; max-width: 30rem; margin: 0 auto; padding: 24px; text-align: center; }
+.vc-access .vc-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
+.vc-actions { display: flex; gap: 8px; }
 
 .vc-editor { height: 100%; }
 .vc-editor .cm-editor { height: 100%; background: transparent; color: var(--vc-strong); }

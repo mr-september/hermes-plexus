@@ -2,7 +2,7 @@
 // writes docs/screenshots/*.png. Only the host app around the plugin (SDK, theme tokens, markdown
 // renderer) is simulated, so these are representative, not literal Hermes Desktop captures.
 //
-//   node scripts/screenshots.mjs [scene …]      scenes: graph nested hidden note preview search local (each in dark and light)
+//   node scripts/screenshots.mjs [scene …]      scenes: graph nested hidden noaccess note preview search local (each in dark and light)
 import { build } from 'esbuild'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -20,6 +20,7 @@ const SCENES = {
   graph: 'overview',
   hidden: 'hidden-folders',
   local: 'local-graph',
+  noaccess: 'no-access',
   nested: 'nested-folders',
   note: 'editor',
   preview: 'preview',

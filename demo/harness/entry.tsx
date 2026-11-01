@@ -50,6 +50,11 @@ for (const [rel, url] of Object.entries(vault.images)) {
   disk.images.set(disk.abs(rel), url)
 }
 
+// The `noaccess` scene is the vault whose folder grant is gone (the state after Hermes revokes or loses the grant).
+if (scene === 'noaccess') {
+  disk.bridge.readDir = async () => ({ entries: [], error: 'no-access' })
+}
+
 const data = new Map<string, unknown>()
 
 const storage = {

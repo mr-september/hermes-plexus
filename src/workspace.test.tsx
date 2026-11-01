@@ -119,6 +119,10 @@ describe('VaultWorkspace', () => {
     mount()
 
     await screen.findByText('Hermes no longer has access to this vault folder. Choose it again to grant access.')
+    // A calm, self-contained state: the last vault is named, and no graph controls are drawn over it.
+    expect(screen.getByText('Last vault: C:\\v')).toBeTruthy()
+    expect(screen.getByText('Choose the same folder to keep your open tabs, pins and layout.')).toBeTruthy()
+    expect(screen.queryByRole('searchbox')).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: 'Choose vault folder…' })[0]!)
     expect(pick).toHaveBeenCalled()
   })

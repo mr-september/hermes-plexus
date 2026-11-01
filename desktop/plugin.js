@@ -525,8 +525,11 @@ var en = {
   empty: {
     chooseHint: "Choose the folder that holds your notes.",
     chooseVault: "Choose vault folder\u2026",
+    lastVault: (path) => `Last vault: ${path}`,
     noAccess: "Hermes no longer has access to this vault folder. Choose it again to grant access.",
     noNotes: "No notes found in this folder.",
+    retry: "Try again",
+    sameFolderHint: "Choose the same folder to keep your open tabs, pins and layout.",
     openNote: "Select a note in the graph or file tree."
   },
   graph: {
@@ -1647,6 +1650,11 @@ var CSS = `
 .vc-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   font-size: 0.875rem; }
 .vc-btn { padding: 4px 12px; border: 1px solid var(--vc-line); }
+.vc-root .vc-empty .vc-btn { padding: 5px 16px; border: 1px solid var(--vc-line); }
+.vc-root .vc-empty .vc-btn[data-primary="true"] { border-color: var(--vc-accent); color: var(--vc-accent); }
+.vc-access { box-sizing: border-box; height: 100%; max-width: 30rem; margin: 0 auto; padding: 24px; text-align: center; }
+.vc-access .vc-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
+.vc-actions { display: flex; gap: 8px; }
 
 .vc-editor { height: 100%; }
 .vc-editor .cm-editor { height: 100%; background: transparent; color: var(--vc-strong); }
@@ -23299,11 +23307,13 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
     return /* @__PURE__ */ jsx8("div", { className: "vc-root", children: /* @__PURE__ */ jsxs7("div", { className: "vc-empty", children: [
       /* @__PURE__ */ jsx8(Codicon4, { name: "folder-library", size: "2rem" }),
       /* @__PURE__ */ jsx8("div", { children: t2("empty.chooseHint") }),
-      /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
+      /* @__PURE__ */ jsx8("button", { className: "vc-btn", "data-primary": true, onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
     ] }) });
   }
   const hasNotes = tabs.length > 0;
   const frac = hasNotes ? prefs.noteFrac : 0;
+  const failed = state.status.error;
+  const noNotes = !failed && !state.status.loading && notes.length === 0;
   return /* @__PURE__ */ jsxs7("div", { className: "vc-root", children: [
     /* @__PURE__ */ jsx8("div", { className: "vc-tree-col", style: { width: prefs.treeOpen ? "15rem" : "1.75rem" }, children: prefs.treeOpen ? /* @__PURE__ */ jsx8(
       FileTree,
@@ -23363,10 +23373,16 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
           },
           children: [
             /* @__PURE__ */ jsxs7("div", { className: "vc-graph-wrap", style: { minHeight: 0, minWidth: 0, overflow: "hidden", position: "relative" }, children: [
-              state.status.error ? /* @__PURE__ */ jsxs7("div", { className: "vc-banner vc-danger", children: [
-                /* @__PURE__ */ jsx8("span", { style: { flex: 1 }, children: state.status.error === NO_ACCESS ? t2("empty.noAccess") : state.status.error }),
-                /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
-              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", tabIndex: -1, children: [
+              failed ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty vc-access", role: "alert", children: [
+                /* @__PURE__ */ jsx8(Codicon4, { name: failed === NO_ACCESS ? "lock" : "warning", size: "2rem" }),
+                /* @__PURE__ */ jsx8("div", { className: failed === NO_ACCESS ? void 0 : "vc-danger", children: failed === NO_ACCESS ? t2("empty.noAccess") : failed }),
+                /* @__PURE__ */ jsx8("div", { className: "vc-dim vc-path", title: root, children: t2("empty.lastVault", root) }),
+                /* @__PURE__ */ jsxs7("div", { className: "vc-actions", children: [
+                  /* @__PURE__ */ jsx8("button", { className: "vc-btn", "data-primary": true, onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") }),
+                  failed !== NO_ACCESS && /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void store.scan("full"), type: "button", children: t2("empty.retry") })
+                ] }),
+                failed === NO_ACCESS && /* @__PURE__ */ jsx8("div", { className: "vc-dim", children: t2("empty.sameFolderHint") })
+              ] }) : noNotes ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", tabIndex: -1, children: [
                 /* @__PURE__ */ jsx8("div", { children: t2("empty.noNotes") }),
                 /* @__PURE__ */ jsx8(
                   HiddenControls,
@@ -23405,7 +23421,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   touched: state.touched
                 }
               ),
-              /* @__PURE__ */ jsxs7("div", { className: "vc-toolbar", children: [
+              !failed && !noNotes && /* @__PURE__ */ jsxs7("div", { className: "vc-toolbar", children: [
                 /* @__PURE__ */ jsx8(
                   "input",
                   {

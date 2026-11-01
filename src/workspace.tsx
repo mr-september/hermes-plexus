@@ -139,7 +139,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
         <div className="vc-empty">
           <Codicon name="folder-library" size="2rem" />
           <div>{t('empty.chooseHint')}</div>
-          <button className="vc-btn" onClick={() => void pickVault()} type="button">
+          <button className="vc-btn" data-primary onClick={() => void pickVault()} type="button">
             {t('empty.chooseVault')}
           </button>
         </div>
@@ -149,6 +149,8 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
 
   const hasNotes = tabs.length > 0
   const frac = hasNotes ? prefs.noteFrac : 0
+  const failed = state.status.error
+  const noNotes = !failed && !state.status.loading && notes.length === 0
 
   return (
     <div className="vc-root">
@@ -214,14 +216,26 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
           }}
         >
           <div className="vc-graph-wrap" style={{ minHeight: 0, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
-            {state.status.error ? (
-              <div className="vc-banner vc-danger">
-                <span style={{ flex: 1 }}>{state.status.error === NO_ACCESS ? t('empty.noAccess') : state.status.error}</span>
-                <button className="vc-btn" onClick={() => void pickVault()} type="button">
-                  {t('empty.chooseVault')}
-                </button>
+            {failed ? (
+              <div className="vc-empty vc-access" role="alert">
+                <Codicon name={failed === NO_ACCESS ? 'lock' : 'warning'} size="2rem" />
+                <div className={failed === NO_ACCESS ? undefined : 'vc-danger'}>{failed === NO_ACCESS ? t('empty.noAccess') : failed}</div>
+                <div className="vc-dim vc-path" title={root}>
+                  {t('empty.lastVault', root)}
+                </div>
+                <div className="vc-actions">
+                  <button className="vc-btn" data-primary onClick={() => void pickVault()} type="button">
+                    {t('empty.chooseVault')}
+                  </button>
+                  {failed !== NO_ACCESS && (
+                    <button className="vc-btn" onClick={() => void store.scan('full')} type="button">
+                      {t('empty.retry')}
+                    </button>
+                  )}
+                </div>
+                {failed === NO_ACCESS && <div className="vc-dim">{t('empty.sameFolderHint')}</div>}
               </div>
-            ) : !state.status.loading && notes.length === 0 ? (
+            ) : noNotes ? (
               <div className="vc-empty" tabIndex={-1}>
                 <div>{t('empty.noNotes')}</div>
                 <HiddenControls
@@ -258,42 +272,44 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                 touched={state.touched}
               />
             )}
-            <div className="vc-toolbar">
-              <input
-                aria-label={t('graph.search')}
-                onChange={event => setSearch(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Escape') {
-                    setSearch('')
-                  }
-                }}
-                placeholder={t('graph.search')}
-                type="search"
-                value={search}
-              />
-              <button
-                aria-pressed={local}
-                className="vc-toggle"
-                data-on={local}
-                disabled={!active}
-                onClick={() => setLocal(!local)}
-                title={t('graph.local')}
-                type="button"
-              >
-                <Codicon name="target" size="0.85rem" />
-              </button>
-              <button
-                aria-pressed={prefs.showOrphans}
-                className="vc-toggle"
-                data-on={prefs.showOrphans}
-                onClick={() => prefsStore.set({ showOrphans: !prefs.showOrphans })}
-                title={t('graph.orphans')}
-                type="button"
-              >
-                <Codicon name="circle-small" size="0.95rem" />
-              </button>
-              {state.status.loading && <span className="vc-dim">…</span>}
-            </div>
+            {!failed && !noNotes && (
+              <div className="vc-toolbar">
+                <input
+                  aria-label={t('graph.search')}
+                  onChange={event => setSearch(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Escape') {
+                      setSearch('')
+                    }
+                  }}
+                  placeholder={t('graph.search')}
+                  type="search"
+                  value={search}
+                />
+                <button
+                  aria-pressed={local}
+                  className="vc-toggle"
+                  data-on={local}
+                  disabled={!active}
+                  onClick={() => setLocal(!local)}
+                  title={t('graph.local')}
+                  type="button"
+                >
+                  <Codicon name="target" size="0.85rem" />
+                </button>
+                <button
+                  aria-pressed={prefs.showOrphans}
+                  className="vc-toggle"
+                  data-on={prefs.showOrphans}
+                  onClick={() => prefsStore.set({ showOrphans: !prefs.showOrphans })}
+                  title={t('graph.orphans')}
+                  type="button"
+                >
+                  <Codicon name="circle-small" size="0.95rem" />
+                </button>
+                {state.status.loading && <span className="vc-dim">…</span>}
+              </div>
+            )}
           </div>
 
           {hasNotes && (

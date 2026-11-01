@@ -11,8 +11,11 @@ export const en = {
   empty: {
     chooseHint: 'Choose the folder that holds your notes.',
     chooseVault: 'Choose vault folder…',
+    lastVault: (path: string) => `Last vault: ${path}`,
     noAccess: 'Hermes no longer has access to this vault folder. Choose it again to grant access.',
     noNotes: 'No notes found in this folder.',
+    retry: 'Try again',
+    sameFolderHint: 'Choose the same folder to keep your open tabs, pins and layout.',
     openNote: 'Select a note in the graph or file tree.'
   },
   graph: {
