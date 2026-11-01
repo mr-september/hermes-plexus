@@ -66,6 +66,13 @@ describe('desktop/plugin.js', () => {
     expect(readFileSync('desktop/plugin.js', 'utf8')).not.toMatch(/hermesDesktop|selectPaths/)
   })
 
+  it('omits the CodeMirror debug prototype extension that Hermes rejects', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync('desktop/plugin.js', 'utf8')
+
+    expect(source).not.toMatch(/Object\.defineProperty\(EditorState\.prototype/)
+  })
+
   it('registers a palette command and a keybind, installs styles, and opens one workspace tab', () => {
 
     const open = vi.spyOn(host, 'openWorkspace')

@@ -162,11 +162,12 @@ plugin.yaml           catalog manifest
 - A note larger than 4 MiB (the file API's read limit) or not UTF-8 text cannot be opened. A vault with a symlink loop is scanned to 32 levels deep, and the workspace shows a warning. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
 - The editor's highlighting is regex-based, not a full markdown parser.
 - UI strings are English only; add a locale object in `src/i18n.ts`.
-- The current host validator rejects the bundled CodeMirror `EditorState.prototype.tree` extension as prototype patching. Builds and bundle smoke tests pass, but installation validation remains blocked by that dependency/validator incompatibility.
 
 ## Build notes
 
 `desktop/plugin.js` is the **built** bundle and is committed, because that is the file Hermes installs and loads (`hermes plugins validate .` checks it). Rebuild it with `npm run build` after changing `src/`; `npm test` rebuilds it first.
+
+The build omits CodeMirror's optional `EditorState.tree` debugging getter, which mutates a prototype and fails Hermes admission lint. It retains the normal `syntaxTree(state)` API and does not modify installed dependency files. The exact-source transform fails the build if that upstream code changes, requiring review on a dependency update.
 
 <div align="center">
 

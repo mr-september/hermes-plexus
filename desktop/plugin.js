@@ -19339,10 +19339,6 @@ var Language = class {
   constructor(data, parser, extraExtensions = [], name2 = "") {
     this.data = data;
     this.name = name2;
-    if (!EditorState.prototype.hasOwnProperty("tree"))
-      Object.defineProperty(EditorState.prototype, "tree", { get() {
-        return syntaxTree(this);
-      } });
     this.parser = parser;
     this.extension = [
       language.of(this),
