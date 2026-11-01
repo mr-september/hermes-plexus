@@ -146,6 +146,17 @@ describe('VaultWorkspace', () => {
     expect(document.activeElement).toBe(screen.getByText('No notes found in this folder.').parentElement)
   })
 
+  it('offers the folders this plugin is already granted, other than the lost vault, and switches to one on a click', async () => {
+    disk.bridge.readDir = async () => ({ entries: [], error: 'no-access' })
+    disk.bridge.grantedFolders = async () => ['C:\\v', 'C:\\Other']
+    prefs.set({ showHidden: true })
+    mount()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'C:\\Other' }))
+    expect(screen.queryByRole('button', { name: 'C:\\v' })).toBeNull()
+    expect(prefs.get().vaultRoot).toBe('C:\\Other')
+  })
+
   it('collapses the note pane to nothing and back via the keyboard-operable divider', async () => {
     mount()
     fireEvent.click(await screen.findByText('Alpha'))

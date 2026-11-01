@@ -458,6 +458,9 @@ function vaultFsFrom(files) {
     path
   });
   return {
+    async grantedFolders() {
+      return (await refresh()).map((grant) => grant.path);
+    },
     async pickFolder() {
       const res = await files.requestFolder();
       if (!res.ok) {
@@ -525,6 +528,7 @@ var en = {
   empty: {
     chooseHint: "Choose the folder that holds your notes.",
     chooseVault: "Choose vault folder\u2026",
+    granted: "Folders already available to this plugin:",
     lastVault: (path) => `Last vault: ${path}`,
     noAccess: "Hermes no longer has access to this vault folder. Choose it again to grant access.",
     noNotes: "No notes found in this folder.",
@@ -1655,6 +1659,8 @@ var CSS = `
 .vc-access { box-sizing: border-box; height: 100%; max-width: 30rem; margin: 0 auto; padding: 24px; text-align: center; }
 .vc-access .vc-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
 .vc-actions { display: flex; gap: 8px; }
+.vc-granted { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; margin-top: 8px; font-size: 0.6875rem; }
+.vc-granted button { max-width: 100%; padding: 1px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vc-accent); }
 
 .vc-editor { height: 100%; }
 .vc-editor .cm-editor { height: 100%; background: transparent; color: var(--vc-strong); }
@@ -23273,6 +23279,25 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
   const warnings = state.status.warnings ?? [];
   const warningKey = warnings.map((item) => `${item.kind}:${item.path}`).join("|");
   const [dismissedWarnings, setDismissedWarnings] = useState5("");
+  const [granted, setGranted] = useState5([]);
+  const needsVault = !root || state.status.error === NO_ACCESS;
+  useEffect6(() => {
+    if (!needsVault) {
+      return;
+    }
+    let live = true;
+    void fs.grantedFolders?.().then(
+      (list) => live && setGranted(list.filter((path) => path !== root)),
+      () => void 0
+    );
+    return () => {
+      live = false;
+    };
+  }, [fs, needsVault, root]);
+  const grantedChoices = granted.length > 0 && /* @__PURE__ */ jsxs7("div", { className: "vc-granted", children: [
+    /* @__PURE__ */ jsx8("div", { className: "vc-dim", children: t2("empty.granted") }),
+    granted.slice(0, 5).map((path) => /* @__PURE__ */ jsx8("button", { onClick: () => prefsStore.useVault(path), title: path, type: "button", children: path }, path))
+  ] });
   const pickVault = async () => {
     const picked = await chooseVaultFolder(fs);
     if (picked) {
@@ -23307,7 +23332,8 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
     return /* @__PURE__ */ jsx8("div", { className: "vc-root", children: /* @__PURE__ */ jsxs7("div", { className: "vc-empty", children: [
       /* @__PURE__ */ jsx8(Codicon4, { name: "folder-library", size: "2rem" }),
       /* @__PURE__ */ jsx8("div", { children: t2("empty.chooseHint") }),
-      /* @__PURE__ */ jsx8("button", { className: "vc-btn", "data-primary": true, onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
+      /* @__PURE__ */ jsx8("button", { className: "vc-btn", "data-primary": true, onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") }),
+      grantedChoices
     ] }) });
   }
   const hasNotes = tabs.length > 0;
@@ -23381,7 +23407,8 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   /* @__PURE__ */ jsx8("button", { className: "vc-btn", "data-primary": true, onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") }),
                   failed !== NO_ACCESS && /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void store.scan("full"), type: "button", children: t2("empty.retry") })
                 ] }),
-                failed === NO_ACCESS && /* @__PURE__ */ jsx8("div", { className: "vc-dim", children: t2("empty.sameFolderHint") })
+                failed === NO_ACCESS && /* @__PURE__ */ jsx8("div", { className: "vc-dim", children: t2("empty.sameFolderHint") }),
+                failed === NO_ACCESS && grantedChoices
               ] }) : noNotes ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", tabIndex: -1, children: [
                 /* @__PURE__ */ jsx8("div", { children: t2("empty.noNotes") }),
                 /* @__PURE__ */ jsx8(

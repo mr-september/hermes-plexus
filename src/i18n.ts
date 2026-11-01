@@ -11,6 +11,7 @@ export const en = {
   empty: {
     chooseHint: 'Choose the folder that holds your notes.',
     chooseVault: 'Choose vault folder…',
+    granted: 'Folders already available to this plugin:',
     lastVault: (path: string) => `Last vault: ${path}`,
     noAccess: 'Hermes no longer has access to this vault folder. Choose it again to grant access.',
     noNotes: 'No notes found in this folder.',

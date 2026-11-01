@@ -28,6 +28,8 @@ export interface ReadFileError {
 }
 
 export interface VaultFs {
+  /** Absolute paths of the folders this plugin has already been granted, for one-click reuse. */
+  grantedFolders?: () => Promise<string[]>
   /** Ask the user for a folder; resolves its absolute path, or null when they cancel. */
   pickFolder?: () => Promise<null | string>
   readDir: (path: string) => Promise<{ entries: DirEntry[]; error?: string; truncated?: boolean }>
@@ -105,6 +107,10 @@ export function vaultFsFrom(files: PluginFiles): VaultFs {
   })
 
   return {
+    async grantedFolders() {
+      return (await refresh()).map(grant => grant.path)
+    },
+
     async pickFolder() {
       const res = await files.requestFolder()
 

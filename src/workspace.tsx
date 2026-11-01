@@ -92,6 +92,38 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
   const warningKey = warnings.map(item => `${item.kind}:${item.path}`).join('|')
   const [dismissedWarnings, setDismissedWarnings] = useState('')
 
+  // Folders the plugin already holds a grant for are offered as one-click choices whenever there is no usable vault.
+  const [granted, setGranted] = useState<string[]>([])
+  const needsVault = !root || state.status.error === NO_ACCESS
+
+  useEffect(() => {
+    if (!needsVault) {
+      return
+    }
+
+    let live = true
+
+    void fs.grantedFolders?.().then(
+      list => live && setGranted(list.filter(path => path !== root)),
+      () => undefined
+    )
+
+    return () => {
+      live = false
+    }
+  }, [fs, needsVault, root])
+
+  const grantedChoices = granted.length > 0 && (
+    <div className="vc-granted">
+      <div className="vc-dim">{t('empty.granted')}</div>
+      {granted.slice(0, 5).map(path => (
+        <button key={path} onClick={() => prefsStore.useVault(path)} title={path} type="button">
+          {path}
+        </button>
+      ))}
+    </div>
+  )
+
   const pickVault = async () => {
     const picked = await chooseVaultFolder(fs)
 
@@ -142,6 +174,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
           <button className="vc-btn" data-primary onClick={() => void pickVault()} type="button">
             {t('empty.chooseVault')}
           </button>
+          {grantedChoices}
         </div>
       </div>
     )
@@ -234,6 +267,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                   )}
                 </div>
                 {failed === NO_ACCESS && <div className="vc-dim">{t('empty.sameFolderHint')}</div>}
+                {failed === NO_ACCESS && grantedChoices}
               </div>
             ) : noNotes ? (
               <div className="vc-empty" tabIndex={-1}>

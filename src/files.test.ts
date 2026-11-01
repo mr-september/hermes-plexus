@@ -81,6 +81,12 @@ describe('vaultFsFrom (ctx.files)', () => {
     expect(files.trash).not.toHaveBeenCalled()
   })
 
+  it('lists the granted folders as absolute paths for reuse', async () => {
+    const { files } = fakeFiles()
+
+    expect(await vaultFsFrom(files).grantedFolders!()).toEqual(['C:\\Notes\\vault'])
+  })
+
   it('surfaces the app’s refusal as a failure, and hands back the picked folder path', async () => {
     const { files } = fakeFiles()
 

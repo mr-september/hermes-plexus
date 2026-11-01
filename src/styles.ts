@@ -108,6 +108,8 @@ export const CSS = `
 .vc-access { box-sizing: border-box; height: 100%; max-width: 30rem; margin: 0 auto; padding: 24px; text-align: center; }
 .vc-access .vc-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
 .vc-actions { display: flex; gap: 8px; }
+.vc-granted { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; margin-top: 8px; font-size: 0.6875rem; }
+.vc-granted button { max-width: 100%; padding: 1px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vc-accent); }
 
 .vc-editor { height: 100%; }
 .vc-editor .cm-editor { height: 100%; background: transparent; color: var(--vc-strong); }
