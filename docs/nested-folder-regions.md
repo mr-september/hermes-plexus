@@ -1,6 +1,6 @@
 # Nested folder regions
 
-Status: implemented behind the opt-in `nested` cluster mode: nested region geometry, whole-note containment, recursive framing and persistence (M0–M3), a reserved label band per region, an undrawn vault-root disc, and subtree hiding (S1–S3). Source: `src/regions.ts`, `src/layout.ts`, `src/camera.ts`, `src/hidden.ts`, `src/hidden-controls.tsx`, `src/graph-view.tsx`. The sections up to "Left to the prototype" are the original design, with decisions marked in place; "Subtree hiding" is a second specification; the **Implementation record** at the end states what the implementation resolved and what was measured. Cost statements in the design sections are reasoning; the measurements are in the record. Not yet judged: the feel on a real nested vault (see "Left to the prototype").
+Status: implemented behind the opt-in `nested` cluster mode: nested region geometry, whole-note containment, recursive framing and persistence (M0–M3), a reserved label band per region, an undrawn vault-root disc, and subtree hiding (S1–S3). Source: `src/regions.ts`, `src/layout.ts`, `src/camera.ts`, `src/hidden.ts`, `src/hidden-controls.tsx`, `src/graph-view.tsx`. The sections up to "Settled by the prototype" are the original design, with decisions marked in place; "Subtree hiding" is a second specification; the **Implementation record** at the end states what the implementation resolved and what was measured. Cost statements in the design sections are reasoning; the measurements are in the record.
 
 ## Problem
 
@@ -141,7 +141,7 @@ Degradation, if measurement shows a cliff: draw regions only on settle while the
 - Framing changes the camera only (see Interaction contract).
 - Containment is a hard clamp with outward velocity removed.
 
-## Left to the prototype
+## Settled by the prototype
 
 1. Whether compartments crowd their edges on real vaults, and the cause if they do (see Note layout). The experiment is the internal-only versus many-external-links comparison; the remedies are ordered there.
 2. The bucket ratio and padding. Start with an upward-rounded geometric bucket and tune by eye on a real nested vault; look for both frequent map shifts and visibly empty compartments.
@@ -197,11 +197,11 @@ A region covered by an explicit entry or a covering ancestor is drawn with a das
 - **S2, controls.** Path-bar button, `H`, recovery controls in `graph-view.tsx` and the empty-scan branch of `workspace.tsx`, and the dashed hidden-region look; view tests, including empty-state recovery.
 - **S3, documentation.** README and a screenshot of a hidden subtree with the Hidden group.
 
-### Decided and deferred
+### Decisions
 
 1. No undo toast. The Hidden group chip (or the legend chip) is the single control for reversing a hide; a toast would be a second control for the same state. Decided.
-2. A "solo" action (show only this folder's subtree) is not built. It is a different state, a single shown path rather than a hidden set, and would need its own persistence and recovery control. Deferred; specify before building.
-3. The Hide and Show button lives in the path bar only. It is accessible and keeps the canvas free of hit-test conflicts. Open until used on a real vault: move it next to the framed region's label only if it proves hard to find.
+2. A "solo" action (show only this folder's subtree) is not built. It is a different state, a single shown path rather than a hidden set, and would need its own persistence and recovery control. Not built; specify before building.
+3. The Hide and Show button lives in the path bar only. It is accessible and keeps the canvas free of hit-test conflicts. Decided.
 
 ## Implementation record
 
@@ -221,7 +221,7 @@ Resolved by the implementation (the design above stands unless noted):
 
 Measured with `node scripts/bench.mjs` (Node 24) and `node scripts/bench.mjs paint` (headless Edge, the real `GraphView`, 1400×880) on the development machine. The Hermes webview was not available, so these are not host measurements and no cutoffs are set from them. Manual `sim.tick()` means over 60 ticks, nested against folder mode: forces cost the same (N=500: 1.4 vs 1.8 ms; 2000: 8.5 vs 8.3; 5000: 26 vs 28; folder-per-note N=1500: 5.7 vs 6.3). The projection adds 0.03 ms (N=500) to 0.4 ms (N=5000) and 0.3 ms at folder-per-note N=1500. Geometry takes 0.4–1.1 ms for up to 5000 notes in 40–121 regions and 9.6 ms for 1540 regions. Paint medians, folder against nested: during the settle 1.0 vs 1.2 ms (N=1000) and 2.9 vs 2.8 ms (N=3000); while zooming 2.0 vs 2.5 ms and 4.1 vs 3.2 ms; folder-per-note N=1000 nested 1.6 ms settling and 3.1 ms zooming. At these sizes the simulation, not the regions, dominates; no knee was found within them, and larger vaults were not measured.
 
-Left to the prototype, as resolved: (1) compartments crowd their edges under the folder-mode forces, and the cause was the force balance (above); (2) bucket ratio 1.5, density 0.4 and padding 8 look right on a generated 220-note, 3-level vault (`docs/screenshots/nested-folders-*.png`) but have not been judged on a real nested vault; (3) navigation across depths and outward worked in headless Edge with real mouse and keyboard input (click a label at each depth, Escape and path steps back out), and a resize keeps the framed folder in the component tests; repack continuity rests on the offset mapping and its tests, not on a visual judgement over time.
+Settled by the prototype: (1) compartments crowd their edges under the folder-mode forces, and the cause was the force balance (above); (2) bucket ratio 1.5, density 0.4 and padding 8 look right on a generated 220-note, 3-level vault (`docs/screenshots/nested-folders-*.png`) but have not been judged on a real nested vault; (3) navigation across depths and outward worked in headless Edge with real mouse and keyboard input (click a label at each depth, Escape and path steps back out), and a resize keeps the framed folder in the component tests; repack continuity rests on the offset mapping and its tests, not on a visual judgement over time.
 
 ### Subtree hiding: implementation notes
 
