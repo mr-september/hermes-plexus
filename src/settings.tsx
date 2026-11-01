@@ -60,7 +60,7 @@ export function VaultSettings({ fs, prefs: store }: { fs: VaultFs; prefs: PrefsS
         >
           <option value="folder">{t('graph.clusterFolder')}</option>
           <option value="nested">{t('graph.clusterNested')}</option>
-          <option value="none">–</option>
+          <option value="none">{t('graph.clusterNone')}</option>
         </select>
       </label>
       <label>

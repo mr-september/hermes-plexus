@@ -26,6 +26,7 @@ export function HiddenControls({ entries, legendFolders, nodes, onClear, onShow 
   const t = usePluginI18n(PLUGIN_ID)
   const root = useRef<HTMLDivElement | null>(null)
   const refocus = useRef<null | number>(null)
+  const fallback = useRef<HTMLElement | null>(null)
   const known = useMemo(() => knownFolders(nodes), [nodes])
   const represented = useMemo(() => new Set(legendFolders), [legendFolders])
   const listed = entries.filter(entry => !represented.has(entry))
@@ -38,9 +39,10 @@ export function HiddenControls({ entries, legendFolders, nodes, onClear, onShow 
     }
 
     const controls = root.current?.querySelectorAll<HTMLButtonElement>('button[data-recovery]') ?? []
-    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? document.querySelector<HTMLElement>('canvas.vc-canvas')
+    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? fallback.current
 
     refocus.current = null
+    fallback.current = null
     next?.focus()
   }, [entries])
 
@@ -52,6 +54,8 @@ export function HiddenControls({ entries, legendFolders, nodes, onClear, onShow 
     const all = [...(root.current?.querySelectorAll('button[data-recovery]') ?? [])]
 
     refocus.current = Math.max(0, all.indexOf(event.currentTarget))
+    fallback.current = root.current?.closest('.vc-graph')?.querySelector<HTMLElement>('canvas.vc-canvas')
+      ?? root.current?.closest<HTMLElement>('.vc-empty') ?? null
     run()
   }
 

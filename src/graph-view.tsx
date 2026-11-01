@@ -137,6 +137,16 @@ export function GraphView(props: GraphViewProps) {
   const geometryCache = useRef<Geometry>(EMPTY_GEOMETRY)
   const source = props.fullGraph ?? graph
 
+  const legendCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    for (const node of source.nodes) {
+      counts.set(node.folder, (counts.get(node.folder) ?? 0) + 1)
+    }
+
+    return counts
+  }, [source])
+
   const geometry = useMemo(() => {
     if (!nested) {
       return EMPTY_GEOMETRY
@@ -500,7 +510,7 @@ export function GraphView(props: GraphViewProps) {
 
     const { h, w } = sizeRef.current
 
-    if (instant || !viewRef.current.k || !w || !h) {
+    if (instant || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || !viewRef.current.k || !w || !h) {
       viewRef.current = target
       draw()
 
@@ -1183,10 +1193,11 @@ export function GraphView(props: GraphViewProps) {
             data-off={hiddenFolders.has(folder)}
             key={folder || '(root)'}
             onClick={() => onToggleFolder(folder)}
+            title={t('graph.subtree', legendCounts.get(folder) ?? 0)}
             type="button"
           >
             <span className="vc-dot" style={{ background: hsl(colorOf(folder), 58) }} />
-            {folder || '(root)'}
+            {folder || t('graph.rootNotes')}
           </button>
         ))}
         <HiddenControls

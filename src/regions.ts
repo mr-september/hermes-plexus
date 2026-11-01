@@ -169,6 +169,18 @@ export function buildGeometry(radii: ReadonlyMap<string, number>): Geometry {
       // A folder with notes and nothing else is its compartment; a folder with one child and no notes
       // is that child (a chain).
       if (only!.packed) {
+        // Keep the synthetic vault root distinct: folding it into a real folder would make that
+        // folder the whole-map target, with no breadcrumb or Hide action of its own.
+        if (dir === '') {
+          return {
+            children: [{ dx: 0, dy: 0, packed: only!.packed }],
+            compartment: null,
+            content: { dx: 0, dy: 0, r: only!.r },
+            dirs: [''],
+            r: only!.r
+          }
+        }
+
         return { ...only!.packed, dirs: [dir, ...only!.packed.dirs] }
       }
 

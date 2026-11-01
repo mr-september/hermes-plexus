@@ -222,7 +222,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                 </button>
               </div>
             ) : !state.status.loading && notes.length === 0 ? (
-              <div className="vc-empty">
+              <div className="vc-empty" tabIndex={-1}>
                 <div>{t('empty.noNotes')}</div>
                 <HiddenControls
                   entries={vault.hiddenInGraph}

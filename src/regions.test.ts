@@ -69,20 +69,23 @@ describe('region geometry', () => {
   it('draws a chain of single-child folders without notes as one region while every folder still resolves to it', () => {
     const geometry = computeGeometry(graphOf('A/B/C/x.md').nodes)
 
-    expect(geometry.regions.size).toBe(1)
+    expect(geometry.regions.size).toBe(2)
 
     const region = regionOfDir(geometry, 'A/B')!
 
     expect(region.id).toBe('A/B/C')
     expect(region.label).toBe('A/B/C')
-    expect(['', 'A', 'A/B', 'A/B/C'].map(dir => geometry.byDir.get(dir))).toEqual(Array(4).fill('A/B/C'))
+    expect(geometry.root).toBe('')
+    expect(geometry.byDir.get('')).toBe('')
+    expect(['A', 'A/B', 'A/B/C'].map(dir => geometry.byDir.get(dir))).toEqual(Array(3).fill('A/B/C'))
+    expectSound(geometry)
 
     // Notes below the chain split it again: the chain keeps its logical folders, the new level gets its own region.
     const deeper = computeGeometry(graphOf('A/B/C/x.md', 'A/B/C/D/y.md').nodes)
 
-    expect([...deeper.regions.keys()]).toEqual(['A/B/C', 'A/B/C/D'])
+    expect([...deeper.regions.keys()]).toEqual(['', 'A/B/C', 'A/B/C/D'])
     expect(deeper.regions.get('A/B/C/D')!.label).toBe('D')
-    expect(regionChain(deeper, 'A/B/C/D').map(r => r.id)).toEqual(['A/B/C', 'A/B/C/D'])
+    expect(regionChain(deeper, 'A/B/C/D').map(r => r.id)).toEqual(['', 'A/B/C', 'A/B/C/D'])
     expectSound(deeper)
   })
 

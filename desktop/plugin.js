@@ -532,6 +532,7 @@ var en = {
   graph: {
     clusterFolder: "Cluster by folder",
     clusterNested: "Nested folder regions (notes stay inside their folder)",
+    clusterNone: "No clustering",
     fit: "Fit",
     announceCovered: (path, by) => `${path} is already hidden by ${by}`,
     announceHid: (path, notes) => `Hid ${path}, ${notes} notes`,
@@ -542,7 +543,7 @@ var en = {
     hiddenSuffix: "(hidden)",
     hideFolder: (path, notes) => `Hide ${path} (${notes} notes)`,
     local: "Local graph (this note and its neighbours)",
-    nestedHelp: "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out.",
+    nestedHelp: "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out. Use Hide or Show in the path bar, or press H on the graph, to toggle the current folder's subtree.",
     notInScan: "not in current scan",
     pathLabel: "Folder path",
     pathRoot: "Vault",
@@ -571,9 +572,9 @@ var en = {
   settings: {
     autosave: "Autosave delay (ms)",
     chooseVault: "Choose vault folder\u2026",
-    cluster: "Cluster graph by folder",
+    cluster: "Graph layout",
     hiddenFolders: "Folders to skip (comma separated)",
-    labels: "Graph labels",
+    labels: "Note labels",
     labelsAlways: "Always",
     labelsAuto: "When zoomed in",
     labelsNever: "Never",
@@ -912,7 +913,7 @@ function VaultSettings({ fs, prefs: store }) {
           children: [
             /* @__PURE__ */ jsx("option", { value: "folder", children: t2("graph.clusterFolder") }),
             /* @__PURE__ */ jsx("option", { value: "nested", children: t2("graph.clusterNested") }),
-            /* @__PURE__ */ jsx("option", { value: "none", children: "\u2013" })
+            /* @__PURE__ */ jsx("option", { value: "none", children: t2("graph.clusterNone") })
           ]
         }
       )
@@ -2095,6 +2096,7 @@ function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
   const t2 = usePluginI18n3(PLUGIN_ID);
   const root = useRef2(null);
   const refocus = useRef2(null);
+  const fallback = useRef2(null);
   const known = useMemo2(() => knownFolders(nodes), [nodes]);
   const represented = useMemo2(() => new Set(legendFolders), [legendFolders]);
   const listed = entries.filter((entry) => !represented.has(entry));
@@ -2104,8 +2106,9 @@ function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
       return;
     }
     const controls = root.current?.querySelectorAll("button[data-recovery]") ?? [];
-    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? document.querySelector("canvas.vc-canvas");
+    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? fallback.current;
     refocus.current = null;
+    fallback.current = null;
     next?.focus();
   }, [entries]);
   if (!listed.length && entries.length < 2) {
@@ -2114,6 +2117,7 @@ function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
   const act = (event, run) => {
     const all = [...root.current?.querySelectorAll("button[data-recovery]") ?? []];
     refocus.current = Math.max(0, all.indexOf(event.currentTarget));
+    fallback.current = root.current?.closest(".vc-graph")?.querySelector("canvas.vc-canvas") ?? root.current?.closest(".vc-empty") ?? null;
     run();
   };
   return /* @__PURE__ */ jsxs3("div", { "aria-label": t2("graph.hiddenGroup"), className: "vc-hidden", ref: root, role: "group", children: [
@@ -3290,6 +3294,15 @@ function buildGeometry(radii) {
     if (items.length === 1) {
       const [only] = items;
       if (only.packed) {
+        if (dir === "") {
+          return {
+            children: [{ dx: 0, dy: 0, packed: only.packed }],
+            compartment: null,
+            content: { dx: 0, dy: 0, r: only.r },
+            dirs: [""],
+            r: only.r
+          };
+        }
         return { ...only.packed, dirs: [dir, ...only.packed.dirs] };
       }
       const band2 = dir === "" ? 0 : LABEL_BAND * own;
@@ -3534,6 +3547,13 @@ function GraphView(props) {
   const folders = useMemo3(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
   const geometryCache = useRef3(EMPTY_GEOMETRY);
   const source = props.fullGraph ?? graph;
+  const legendCounts = useMemo3(() => {
+    const counts = /* @__PURE__ */ new Map();
+    for (const node of source.nodes) {
+      counts.set(node.folder, (counts.get(node.folder) ?? 0) + 1);
+    }
+    return counts;
+  }, [source]);
   const geometry = useMemo3(() => {
     if (!nested) {
       return EMPTY_GEOMETRY;
@@ -3790,7 +3810,7 @@ function GraphView(props) {
   const moveTo = (target, instant) => {
     cancelAnimationFrame(animRef.current);
     const { h, w } = sizeRef.current;
-    if (instant || !viewRef.current.k || !w || !h) {
+    if (instant || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || !viewRef.current.k || !w || !h) {
       viewRef.current = target;
       draw();
       return;
@@ -4275,10 +4295,11 @@ function GraphView(props) {
           "aria-pressed": !hiddenFolders.has(folder),
           "data-off": hiddenFolders.has(folder),
           onClick: () => onToggleFolder(folder),
+          title: t2("graph.subtree", legendCounts.get(folder) ?? 0),
           type: "button",
           children: [
             /* @__PURE__ */ jsx4("span", { className: "vc-dot", style: { background: hsl(colorOf(folder), 58) } }),
-            folder || "(root)"
+            folder || t2("graph.rootNotes")
           ]
         },
         folder || "(root)"
@@ -23349,7 +23370,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
               state.status.error ? /* @__PURE__ */ jsxs7("div", { className: "vc-banner vc-danger", children: [
                 /* @__PURE__ */ jsx8("span", { style: { flex: 1 }, children: state.status.error === NO_ACCESS ? t2("empty.noAccess") : state.status.error }),
                 /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
-              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", children: [
+              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", tabIndex: -1, children: [
                 /* @__PURE__ */ jsx8("div", { children: t2("empty.noNotes") }),
                 /* @__PURE__ */ jsx8(
                   HiddenControls,

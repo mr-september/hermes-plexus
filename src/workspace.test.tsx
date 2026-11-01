@@ -139,6 +139,7 @@ describe('VaultWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Show Old/Deep' }))
     expect(store.get().vault.hiddenInGraph).toEqual([])
     expect(screen.queryByRole('group', { name: 'Hidden' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByText('No notes found in this folder.').parentElement)
   })
 
   it('collapses the note pane to nothing and back via the keyboard-operable divider', async () => {

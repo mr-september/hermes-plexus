@@ -433,6 +433,20 @@ describe('GraphView nested folder regions', () => {
     const settleCamera = () => act(() => vi.advanceTimersByTimeAsync(1500))
     const path = () => [...screen.getByRole('navigation').querySelectorAll(':scope > button')].map(button => button.textContent)
 
+    it('frames immediately when the system requests reduced motion', async () => {
+      const matchMedia = vi.fn(() => ({ matches: true }))
+
+      vi.stubGlobal('matchMedia', matchMedia)
+      render(<GraphView {...nestedProps()} />)
+      await settle()
+      click(labelPoint('A'))
+      await act(() => vi.advanceTimersByTimeAsync(20))
+      expect(matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)')
+      expect(framing('A').r).toBeCloseTo(252, 3)
+      expect(framing('A').x).toBeCloseTo(400, 3)
+      await settleCamera()
+    })
+
     it('clicking a region label frames that folder, recursively down to the deepest one, beyond the global Fit cap', async () => {
       render(<GraphView {...nestedProps()} />)
       await settle()
@@ -502,6 +516,19 @@ describe('GraphView nested folder regions', () => {
       const bar = () => within(screen.getByRole('navigation'))
       const status = () => screen.getByRole('status').textContent
       const dashes = (paint: Paint) => paint.filter(call => call[0] === 'setLineDash' && (call[1][0] as number[]).length > 0)
+
+      it('can frame and hide the only folder chain in a vault, separately from Vault', async () => {
+        const graph = buildGraph(ring('A/B/C', 8))
+        const stub = handlers()
+
+        render(<GraphView {...nestedProps(graph, { ...stub, legendFolders: ['A'] })} />)
+        await settle()
+        click(labelPoint('A/B/C'))
+        await settleCamera()
+        expect(bar().getByRole('button', { name: 'Hide A/B/C (8 notes)' })).toBeTruthy()
+        fireEvent.keyDown(canvas(), { key: 'h' })
+        expect(stub.onHidePath).toHaveBeenCalledExactlyOnceWith('A/B/C')
+      })
 
       it('acts on the folder the camera is in, never the hovered one, and names it by its full path', async () => {
         const stub = handlers()

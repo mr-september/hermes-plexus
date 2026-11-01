@@ -27,7 +27,7 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
 ## What it does
 
 - **A graph of your vault.** Notes are nodes and `[[wikilinks]]` are edges, clustered and coloured by top-level folder. Scroll to zoom, drag to pan or move a node, click to open, Shift+click to pin. The filter box dims everything that does not match (`#tag` works too), the target button shows just the open note and its neighbours, and the legend hides whole folders. Notes changed by something else, such as the agent, get a dashed halo for ten minutes.
-- **Nested folder regions (opt-in).** Set **Cluster graph by folder** to *Nested folder regions* and every folder becomes a translucent disc inside its parent, with its notes inside it; the map is laid out once from the whole vault, so filters, search and the local graph never move it. Click a region's label to zoom to that folder (the same gesture at every depth), click a step of the path at the bottom or press Escape to go back out, and scroll or drag as usual. A note cannot be dragged out of its own folder's region; that is the price of the guarantee that no note ever straddles another folder. Chains of folders with no notes and one child draw as one region (`A/B/C`). Frame a folder and press **Hide** in the path bar (or **H** on the graph) to take its whole subtree out of the graph: its region stays where it is, drawn dashed and marked "(hidden)", so you can still frame it, and every hidden folder is listed with its note count under **Hidden** in the legend, where one click brings it back. Hiding a folder inside an already hidden one changes nothing, and showing a folder removes only its own entry.
+- **Nested folder regions (opt-in).** Set **Graph layout** to *Nested folder regions* and every folder becomes a translucent disc inside its parent, with its notes inside it; the map is laid out once from the whole vault, so filters, search and the local graph never move it. Click a region's label to zoom to that folder (the same gesture at every depth), click a step of the path at the bottom or press Escape to go back out, and scroll or drag as usual. A note cannot be dragged out of its own folder's region; that is the price of the guarantee that no note ever straddles another folder. Chains of folders with no notes and one child draw as one region (`A/B/C`). Frame a folder and press **Hide** in the path bar (or **H** on the graph) to take its whole subtree out of the graph: its region stays where it is, drawn dashed and marked "(hidden)", so you can still frame it, and each saved hidden path has a recovery control in the legend: top-level paths stay on their existing chips; deeper and stale paths appear under **Hidden** with subtree totals for current paths. Showing a path removes only that entry, so overlapping hidden paths can still exclude notes. **Show all** clears graph-hidden paths; other filters still apply. Hiding a folder inside an already hidden one changes nothing. **Note labels** controls note text; folder labels remain available for navigation, and framing honours the system reduced-motion preference.
 - **A file tree you can hide.** `.md` notes by folder, with new, rename, move to trash (recoverable) and drag-to-move. Moving or renaming rewrites the links that pointed at the note, keeping aliases, headings and embeds.
 - **A tabbed editor beside the graph.** Markdown source with autosave, `[[` autocomplete, Ctrl/⌘-click to follow a link (a missing target is created next to the current note), an Edit/Preview toggle and a backlinks list. The divider between graph and editor snaps to 0% or 100%, so either side can vanish.
 - **Real wikilinks.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` jump to the heading or block. Preview shows vault images (`![[pic.png|300]]`, `![alt](img/pic.png)`) and embeds a note or one of its sections (`![[Note#Heading]]`).
@@ -79,11 +79,16 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
         <img src="docs/screenshots/nested-folders-light.png" alt="Nested folder regions: each folder a disc inside its parent, with its notes inside it, on a generated multi-level vault">
       </picture>
     </td>
-    <td></td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hidden-folders-dark.png">
+        <img src="docs/screenshots/hidden-folders-light.png" alt="Hidden subtrees keep their dashed regions; the legend provides recovery controls for deeper and stale paths">
+      </picture>
+    </td>
   </tr>
   <tr>
     <td align="center"><sub>Nested folder regions (generated vault).</sub></td>
-    <td></td>
+    <td align="center"><sub>Hidden subtrees and recovery controls (generated vault).</sub></td>
   </tr>
 </table>
 </div>
@@ -157,6 +162,7 @@ plugin.yaml           catalog manifest
 - A note larger than 4 MiB (the file API's read limit) or not UTF-8 text cannot be opened. A vault with a symlink loop is scanned to 32 levels deep, and the workspace shows a warning. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
 - The editor's highlighting is regex-based, not a full markdown parser.
 - UI strings are English only; add a locale object in `src/i18n.ts`.
+- The current host validator rejects the bundled CodeMirror `EditorState.prototype.tree` extension as prototype patching. Builds and bundle smoke tests pass, but installation validation remains blocked by that dependency/validator incompatibility.
 
 ## Build notes
 

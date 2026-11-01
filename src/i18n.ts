@@ -18,6 +18,7 @@ export const en = {
   graph: {
     clusterFolder: 'Cluster by folder',
     clusterNested: 'Nested folder regions (notes stay inside their folder)',
+    clusterNone: 'No clustering',
     fit: 'Fit',
     announceCovered: (path: string, by: string) => `${path} is already hidden by ${by}`,
     announceHid: (path: string, notes: number) => `Hid ${path}, ${notes} notes`,
@@ -29,7 +30,7 @@ export const en = {
     hideFolder: (path: string, notes: number) => `Hide ${path} (${notes} notes)`,
     local: 'Local graph (this note and its neighbours)',
     nestedHelp:
-      "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out.",
+      "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out. Use Hide or Show in the path bar, or press H on the graph, to toggle the current folder's subtree.",
     notInScan: 'not in current scan',
     pathLabel: 'Folder path',
     pathRoot: 'Vault',
@@ -58,9 +59,9 @@ export const en = {
   settings: {
     autosave: 'Autosave delay (ms)',
     chooseVault: 'Choose vault folder…',
-    cluster: 'Cluster graph by folder',
+    cluster: 'Graph layout',
     hiddenFolders: 'Folders to skip (comma separated)',
-    labels: 'Graph labels',
+    labels: 'Note labels',
     labelsAlways: 'Always',
     labelsAuto: 'When zoomed in',
     labelsNever: 'Never',
