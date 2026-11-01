@@ -3,6 +3,8 @@
  * graph building and view helpers. No DOM, no disk — all unit-tested.
  */
 
+import { isHiddenDir } from './hidden'
+
 export interface VaultNote {
   /** Absolute path inside the vault folder. */
   path: string
@@ -320,7 +322,7 @@ export function neighborhood(graph: VaultGraph, rel: string, depth: number): Set
 }
 
 export interface GraphFilter {
-  /** Notes in these top-level folders are hidden (`''` = the vault root). */
+  /** Folder paths whose notes are hidden, each covering its subtree (`''` = the notes directly in the vault root). */
   hiddenFolders: ReadonlySet<string>
   /** Restrict to the neighbourhood of this note. */
   local: null | { depth: number; rel: string }
@@ -330,12 +332,24 @@ export interface GraphFilter {
 /** The subgraph the view draws. Search is NOT applied here — it dims instead of removing. */
 export function filterGraph(graph: VaultGraph, filter: GraphFilter): VaultGraph {
   const allowed = filter.local ? neighborhood(graph, filter.local.rel, filter.local.depth) : null
+  const hiddenDirs = new Map<string, boolean>()
+
+  const hidden = (dir: string): boolean => {
+    let result = hiddenDirs.get(dir)
+
+    if (result === undefined) {
+      result = isHiddenDir(filter.hiddenFolders, dir)
+      hiddenDirs.set(dir, result)
+    }
+
+    return result
+  }
 
   const keep = new Set(
     graph.nodes
       .filter(
         node =>
-          !filter.hiddenFolders.has(node.folder) &&
+          !hidden(node.dir) &&
           (!allowed || allowed.has(node.id)) &&
           (filter.showOrphans || node.degree > 0 || node.id === filter.local?.rel)
       )

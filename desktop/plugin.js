@@ -7,6 +7,40 @@ import {
   PALETTE_AREA
 } from "@hermes/plugin-sdk";
 
+// src/hidden.ts
+var parentOf = (dir) => dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "";
+var covers = (entry, dir) => entry === "" ? dir === "" : dir === entry || dir.startsWith(`${entry}/`);
+function coveringEntry(entries, dir) {
+  if (entries.has(dir)) {
+    return dir;
+  }
+  for (let up = parentOf(dir); up !== ""; up = parentOf(up)) {
+    if (entries.has(up)) {
+      return up;
+    }
+  }
+  return null;
+}
+var isHiddenDir = (entries, dir) => coveringEntry(entries, dir) !== null;
+function hidePath(entries, path) {
+  const coveredBy = coveringEntry(new Set(entries), path);
+  return { coveredBy, entries: coveredBy === null ? [...entries, path] : [...entries] };
+}
+var showPath = (entries, path) => entries.filter((entry) => entry !== path);
+var subtreeCount = (nodes, entry) => nodes.reduce((count, node) => count + (covers(entry, node.dir) ? 1 : 0), 0);
+function knownFolders(nodes) {
+  const known = /* @__PURE__ */ new Set();
+  for (const { dir } of nodes) {
+    if (dir === "") {
+      known.add("");
+    }
+    for (let at = dir; at !== "" && !known.has(at); at = parentOf(at)) {
+      known.add(at);
+    }
+  }
+  return known;
+}
+
 // src/model.ts
 var EMPTY_GRAPH = { edges: [], nodes: [] };
 var normalizeSlashes = (value) => value.replace(/\\/g, "/");
@@ -190,9 +224,18 @@ function neighborhood(graph, rel, depth) {
 }
 function filterGraph(graph, filter) {
   const allowed = filter.local ? neighborhood(graph, filter.local.rel, filter.local.depth) : null;
+  const hiddenDirs = /* @__PURE__ */ new Map();
+  const hidden = (dir) => {
+    let result = hiddenDirs.get(dir);
+    if (result === void 0) {
+      result = isHiddenDir(filter.hiddenFolders, dir);
+      hiddenDirs.set(dir, result);
+    }
+    return result;
+  };
   const keep = new Set(
     graph.nodes.filter(
-      (node) => !filter.hiddenFolders.has(node.folder) && (!allowed || allowed.has(node.id)) && (filter.showOrphans || node.degree > 0 || node.id === filter.local?.rel)
+      (node) => !hidden(node.dir) && (!allowed || allowed.has(node.id)) && (filter.showOrphans || node.degree > 0 || node.id === filter.local?.rel)
     ).map((node) => node.id)
   );
   return {
@@ -490,11 +533,23 @@ var en = {
     clusterFolder: "Cluster by folder",
     clusterNested: "Nested folder regions (notes stay inside their folder)",
     fit: "Fit",
+    announceCovered: (path, by) => `${path} is already hidden by ${by}`,
+    announceHid: (path, notes) => `Hid ${path}, ${notes} notes`,
+    announceShown: (path) => `Removed ${path}`,
+    announceStill: (path, by) => `Removed ${path}; still hidden by ${by}`,
     graphLabel: "Note graph. Arrow keys move between linked notes, Enter opens the selected note.",
+    hiddenGroup: "Hidden",
+    hiddenSuffix: "(hidden)",
+    hideFolder: (path, notes) => `Hide ${path} (${notes} notes)`,
     local: "Local graph (this note and its neighbours)",
     nestedHelp: "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out.",
+    notInScan: "not in current scan",
     pathLabel: "Folder path",
     pathRoot: "Vault",
+    rootNotes: "Root notes",
+    showAll: "Show all",
+    showFolder: (path) => `Show ${path}`,
+    subtree: (notes) => `${notes} notes in this subtree`,
     orphans: "Show unlinked notes",
     search: "Filter notes\u2026 (#tag)",
     stats: (notes, links) => `${notes} notes \xB7 ${links} links`
@@ -1454,11 +1509,28 @@ var VaultStore = class {
     const { pinned } = this.state.vault;
     this.updateVault({ pinned: pinned.includes(rel) ? pinned.filter((item) => item !== rel) : [...pinned, rel] });
   }
+  /** Legend chips: hide the folder, or remove exactly its entry if it is already one. */
   toggleFolderInGraph(folder) {
-    const { hiddenInGraph } = this.state.vault;
-    this.updateVault({
-      hiddenInGraph: hiddenInGraph.includes(folder) ? hiddenInGraph.filter((item) => item !== folder) : [...hiddenInGraph, folder]
-    });
+    if (this.state.vault.hiddenInGraph.includes(folder)) {
+      this.showInGraph(folder);
+    } else {
+      this.hideInGraph(folder);
+    }
+  }
+  /** Hide a folder's subtree. A path an existing entry already covers adds nothing; says what covers it. */
+  hideInGraph(path) {
+    const { coveredBy, entries } = hidePath(this.state.vault.hiddenInGraph, path);
+    if (coveredBy === null) {
+      this.updateVault({ hiddenInGraph: entries });
+    }
+    return { coveredBy };
+  }
+  /** Remove exactly one entry; other entries, ancestors and descendants included, keep hiding what they hide. */
+  showInGraph(path) {
+    this.updateVault({ hiddenInGraph: showPath(this.state.vault.hiddenInGraph, path) });
+  }
+  clearHiddenInGraph() {
+    this.updateVault({ hiddenInGraph: [] });
   }
   /**
    * Remember settled absolute positions of the folder/none layouts; merged, so a local graph does not erase
@@ -1533,6 +1605,11 @@ var CSS = `
   font-size: 0.6875rem; color: var(--vc-dim); }
 .vc-legend button { display: inline-flex; align-items: center; gap: 4px; padding: 0 2px; }
 .vc-legend button[data-off="true"] { opacity: 0.4; text-decoration: line-through; }
+.vc-hidden { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.vc-hidden button[data-stale="true"] { opacity: 0.55; font-style: italic; }
+.vc-hide-wrap { margin-left: auto; pointer-events: auto; }
+.vc-crumbs .vc-hide-wrap button { color: var(--vc-accent); }
+.vc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .vc-toolbar { position: absolute; left: 8px; right: 8px; top: 6px; display: flex; align-items: center; gap: 6px; }
 .vc-toolbar input { width: 12rem; }
@@ -1626,8 +1703,8 @@ var PREVIEW_CSS = `
 `;
 
 // src/workspace.tsx
-import { useCallback, useEffect as useEffect5, useMemo as useMemo4, useRef as useRef5, useState as useState5, useSyncExternalStore as useSyncExternalStore2 } from "react";
-import { Codicon as Codicon4, usePluginI18n as usePluginI18n6 } from "@hermes/plugin-sdk";
+import { useCallback, useEffect as useEffect6, useMemo as useMemo5, useRef as useRef6, useState as useState5, useSyncExternalStore as useSyncExternalStore2 } from "react";
+import { Codicon as Codicon4, usePluginI18n as usePluginI18n7 } from "@hermes/plugin-sdk";
 
 // src/file-tree.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1933,8 +2010,8 @@ function FileTree(props) {
 }
 
 // src/graph-view.tsx
-import { Fragment, useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2, useState as useState2 } from "react";
-import { Codicon as Codicon2, usePluginI18n as usePluginI18n3 } from "@hermes/plugin-sdk";
+import { Fragment, useEffect as useEffect3, useMemo as useMemo3, useRef as useRef3, useState as useState2 } from "react";
+import { Codicon as Codicon2, usePluginI18n as usePluginI18n4 } from "@hermes/plugin-sdk";
 
 // src/camera.ts
 var BASE_ZOOM = { max: 6, min: 0.1 };
@@ -2008,6 +2085,61 @@ function zoomPath(from, to, w, h) {
     },
     ms: Math.min(900, Math.max(320, Math.abs(S) * 700))
   };
+}
+
+// src/hidden-controls.tsx
+import { usePluginI18n as usePluginI18n3 } from "@hermes/plugin-sdk";
+import { useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2 } from "react";
+import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
+  const t2 = usePluginI18n3(PLUGIN_ID);
+  const root = useRef2(null);
+  const refocus = useRef2(null);
+  const known = useMemo2(() => knownFolders(nodes), [nodes]);
+  const represented = useMemo2(() => new Set(legendFolders), [legendFolders]);
+  const listed = entries.filter((entry) => !represented.has(entry));
+  const counts = useMemo2(() => new Map(listed.map((entry) => [entry, subtreeCount(nodes, entry)])), [listed.join("\0"), nodes]);
+  useEffect2(() => {
+    if (refocus.current === null) {
+      return;
+    }
+    const controls = root.current?.querySelectorAll("button[data-recovery]") ?? [];
+    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? document.querySelector("canvas.vc-canvas");
+    refocus.current = null;
+    next?.focus();
+  }, [entries]);
+  if (!listed.length && entries.length < 2) {
+    return null;
+  }
+  const act = (event, run) => {
+    const all = [...root.current?.querySelectorAll("button[data-recovery]") ?? []];
+    refocus.current = Math.max(0, all.indexOf(event.currentTarget));
+    run();
+  };
+  return /* @__PURE__ */ jsxs3("div", { "aria-label": t2("graph.hiddenGroup"), className: "vc-hidden", ref: root, role: "group", children: [
+    /* @__PURE__ */ jsxs3("span", { children: [
+      t2("graph.hiddenGroup"),
+      ":"
+    ] }),
+    listed.map((entry) => {
+      const name2 = entry === "" ? t2("graph.rootNotes") : entry;
+      const stale = !known.has(entry);
+      return /* @__PURE__ */ jsx3(
+        "button",
+        {
+          "aria-label": t2("graph.showFolder", name2),
+          "data-recovery": true,
+          "data-stale": stale,
+          onClick: (event) => act(event, () => onShow(entry)),
+          title: stale ? t2("graph.notInScan") : t2("graph.subtree", counts.get(entry) ?? 0),
+          type: "button",
+          children: stale ? `${name2} (${t2("graph.notInScan")})` : `${name2} \xB7 ${counts.get(entry) ?? 0}`
+        },
+        entry
+      );
+    }),
+    entries.length >= 2 && /* @__PURE__ */ jsx3("button", { "data-recovery": true, onClick: (event) => act(event, onClear), type: "button", children: t2("graph.showAll") })
+  ] });
 }
 
 // node_modules/d3-quadtree/src/add.js
@@ -3363,7 +3495,7 @@ function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
 }
 
 // src/graph-view.tsx
-import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var TOUCHED_MS = 10 * 60 * 1e3;
 var REGION_MIN_PX = 14;
 var LABEL_MIN_PX = 40;
@@ -3374,35 +3506,35 @@ var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(di
 function GraphView(props) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props;
   const nested = cluster === "nested";
-  const t2 = usePluginI18n3(PLUGIN_ID);
-  const canvasRef = useRef2(null);
-  const wrapRef = useRef2(null);
-  const simRef = useRef2(null);
-  const nodesRef = useRef2([]);
-  const linksRef = useRef2([]);
-  const viewRef = useRef2({ k: 1, x: 0, y: 0 });
-  const sizeRef = useRef2({ h: 0, w: 0 });
-  const hoverRef = useRef2(null);
-  const hoverRegionRef = useRef2(null);
-  const cursorRef = useRef2(null);
-  const frameRef = useRef2(0);
-  const animRef = useRef2(0);
-  const fittedRef = useRef2(false);
-  const refitRef = useRef2(false);
-  const layoutRef = useRef2(null);
-  const occupiedRef = useRef2(/* @__PURE__ */ new Set());
-  const labelBoxesRef = useRef2([]);
-  const anchoredRef = useRef2(false);
+  const t2 = usePluginI18n4(PLUGIN_ID);
+  const canvasRef = useRef3(null);
+  const wrapRef = useRef3(null);
+  const simRef = useRef3(null);
+  const nodesRef = useRef3([]);
+  const linksRef = useRef3([]);
+  const viewRef = useRef3({ k: 1, x: 0, y: 0 });
+  const sizeRef = useRef3({ h: 0, w: 0 });
+  const hoverRef = useRef3(null);
+  const hoverRegionRef = useRef3(null);
+  const cursorRef = useRef3(null);
+  const frameRef = useRef3(0);
+  const animRef = useRef3(0);
+  const fittedRef = useRef3(false);
+  const refitRef = useRef3(false);
+  const layoutRef = useRef3(null);
+  const occupiedRef = useRef3(/* @__PURE__ */ new Set());
+  const labelBoxesRef = useRef3([]);
+  const anchoredRef = useRef3(false);
   const [pointer, setPointer] = useState2(false);
   const [current, setCurrentState] = useState2(null);
-  const currentRef = useRef2(null);
+  const currentRef = useRef3(null);
   const [hoverRegion, setHoverRegion] = useState2(null);
-  const live = useRef2(props);
+  const live = useRef3(props);
   live.current = props;
-  const folders = useMemo2(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
-  const geometryCache = useRef2(EMPTY_GEOMETRY);
+  const folders = useMemo3(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
+  const geometryCache = useRef3(EMPTY_GEOMETRY);
   const source = props.fullGraph ?? graph;
-  const geometry = useMemo2(() => {
+  const geometry = useMemo3(() => {
     if (!nested) {
       return EMPTY_GEOMETRY;
     }
@@ -3412,10 +3544,10 @@ function GraphView(props) {
     }
     return geometryCache.current;
   }, [nested, source]);
-  const geometryRef = useRef2(geometry);
+  const geometryRef = useRef3(geometry);
   geometryRef.current = geometry;
-  const hues = useMemo2(() => folderHues(legendFolders), [legendFolders]);
-  const huesRef = useRef2(hues);
+  const hues = useMemo3(() => folderHues(legendFolders), [legendFolders]);
+  const huesRef = useRef3(hues);
   huesRef.current = hues;
   const colorOf = (folder) => cluster === "none" ? 210 : huesRef.current.get(folder) ?? 210;
   const limits = () => zoomLimits(nested ? geometryRef.current : null, sizeRef.current.w, sizeRef.current.h);
@@ -3448,7 +3580,7 @@ function GraphView(props) {
     ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const disc = (cx, cy, r, hue, depth, lit, empty, own) => {
+    const disc = (cx, cy, r, hue, depth, lit, empty, own, dashed) => {
       const recede = focusId !== null && !lit;
       const faint = empty ? 0.35 : 1;
       ctx.beginPath();
@@ -3456,10 +3588,16 @@ function GraphView(props) {
       ctx.globalAlpha = (own ? 0.05 : 0.16 / (1 + 0.45 * depth)) * (lit ? 1.7 : recede ? 0.45 : 1) * faint;
       ctx.fillStyle = hsl(hue, Math.min(72, 50 + 4 * depth));
       ctx.fill();
-      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * faint;
+      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * (dashed ? 1 : faint);
       ctx.strokeStyle = hsl(hue, Math.min(72, 54 + 4 * depth));
       ctx.lineWidth = (lit ? 1.8 : 1) / k;
+      if (dashed) {
+        ctx.setLineDash([5 / k, 4 / k]);
+      }
       ctx.stroke();
+      if (dashed) {
+        ctx.setLineDash([]);
+      }
     };
     const visit = (region) => {
       const s = region.r * k;
@@ -3468,22 +3606,35 @@ function GraphView(props) {
       }
       const hue = colorOf(region.top);
       const lit = chain.has(region.id);
-      const covers = [
+      const covers2 = [
         [left, top2],
         [right, top2],
         [left, bottom],
         [right, bottom]
       ].every(([px, py]) => Math.hypot(px - region.x, py - region.y) < region.r);
-      if (!covers && region.id !== "") {
-        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false);
+      const hiddenSet = live.current.hiddenFolders;
+      const hidden = region.id !== "" && isHiddenDir(hiddenSet, region.id);
+      if (!covers2 && region.id !== "") {
+        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false, hidden);
       }
       const comp = region.compartment;
       if (comp && region.children.length && comp.r * k >= REGION_MIN_PX) {
-        disc(comp.x, comp.y, comp.r, hue, region.depth + 1, lit, !occupiedRef.current.has(region.id), true);
+        disc(
+          comp.x,
+          comp.y,
+          comp.r,
+          hue,
+          region.depth + 1,
+          lit,
+          !occupiedRef.current.has(region.id),
+          true,
+          region.id === "" ? hiddenSet.has("") : hidden
+        );
       }
       const forced = region.id === focusId || region.id === currentRef.current;
-      if (region.label && !covers && (s >= LABEL_MIN_PX || forced)) {
-        const width = ctx.measureText(region.label).width;
+      if (region.label && !covers2 && (s >= LABEL_MIN_PX || forced)) {
+        const text = hidden ? `${region.label} ${t2("graph.hiddenSuffix")}` : region.label;
+        const width = ctx.measureText(text).width;
         const half = width / 2 + 3 / k;
         const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
         const dy = Math.max(3 / k, room);
@@ -3499,7 +3650,7 @@ function GraphView(props) {
             labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });
             ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85;
             ctx.fillStyle = ink;
-            ctx.fillText(region.label, region.x, box[1]);
+            ctx.fillText(text, region.x, box[1]);
           }
         }
       }
@@ -3630,7 +3781,7 @@ function GraphView(props) {
     ctx.globalAlpha = 1;
     live.current.onPaintTime?.(performance.now() - started);
   };
-  const paintRef = useRef2(paint);
+  const paintRef = useRef3(paint);
   paintRef.current = paint;
   const draw = () => {
     cancelAnimationFrame(frameRef.current);
@@ -3702,7 +3853,7 @@ function GraphView(props) {
     viewRef.current = { k, x: w / 2 - (minX + maxX) / 2 * k, y: h / 2 - (minY + maxY) / 2 * k };
     draw();
   };
-  useEffect2(() => {
+  useEffect3(() => {
     const previousLayout = layoutRef.current;
     const sameMode = previousLayout?.mode === cluster;
     const previous = new Map(nodesRef.current.map((node) => [node.id, node]));
@@ -3830,7 +3981,7 @@ function GraphView(props) {
     draw();
     return () => void sim.stop();
   }, [graph, folders, cluster, geometry]);
-  useEffect2(() => {
+  useEffect3(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
     if (!wrap || !canvas) {
@@ -3869,7 +4020,7 @@ function GraphView(props) {
       cancelAnimationFrame(animRef.current);
     };
   }, [nested]);
-  useEffect2(() => {
+  useEffect3(() => {
     for (const node of nodesRef.current) {
       node.fx = props.pinned.has(node.id) ? node.x : null;
       node.fy = props.pinned.has(node.id) ? node.y : null;
@@ -3878,7 +4029,7 @@ function GraphView(props) {
       containAll(nodesRef.current, geometryRef.current);
     }
   }, [props.pinned]);
-  useEffect2(() => {
+  useEffect3(() => {
     const id = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(id);
   }, [selected, props.openRels, props.search, props.pinned, props.touched, labels, hiddenFolders]);
@@ -3909,7 +4060,7 @@ function GraphView(props) {
     const at = worldAt(clientX, clientY);
     return regionAt(geometryRef.current, at.x, at.y, regionVisible);
   };
-  const drag = useRef2(null);
+  const drag = useRef3(null);
   const onPointerDown = (event) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.focus();
@@ -4002,12 +4153,43 @@ function GraphView(props) {
     }
     draw();
   };
+  const currentRegion = nested && current !== null ? geometry.regions.get(current) : void 0;
+  const covering = currentRegion ? coveringEntry(hiddenFolders, currentRegion.id) : null;
+  const action = currentRegion ? covering === null ? { kind: "hide", path: currentRegion.id } : { kind: "show", path: covering } : null;
+  const [announcement, setAnnouncement] = useState2({ n: 0, text: "" });
+  const announce = (text) => setAnnouncement((previous) => ({ n: previous.n + 1, text }));
+  const actOnCurrent = () => {
+    if (!action || !currentRegion) {
+      return;
+    }
+    if (action.kind === "hide") {
+      const { coveredBy } = props.onHidePath(action.path);
+      announce(
+        coveredBy === null ? t2("graph.announceHid", action.path, subtreeCount(source.nodes, action.path)) : t2("graph.announceCovered", action.path, coveredBy)
+      );
+      return;
+    }
+    const rest = new Set(hiddenFolders);
+    rest.delete(action.path);
+    props.onShowPath(action.path);
+    const still = coveringEntry(rest, currentRegion.id);
+    announce(still === null ? t2("graph.announceShown", action.path) : t2("graph.announceStill", action.path, still));
+  };
   const onKeyDown = (event) => {
     if (event.key === "Escape") {
       const region = currentRef.current === null ? void 0 : geometryRef.current.regions.get(currentRef.current);
       if (nested && region) {
         event.preventDefault();
         frame2(region.parent);
+      }
+      return;
+    }
+    if (event.key.toLowerCase() === "h" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (nested) {
+        event.preventDefault();
+        if (!event.repeat) {
+          actOnCurrent();
+        }
       }
       return;
     }
@@ -4059,8 +4241,8 @@ function GraphView(props) {
     { id: null, label: t2("graph.pathRoot") },
     ...regionChain(geometry, hoverRegion ?? current).filter((region) => region.id !== geometry.root).map((region) => ({ id: region.id, label: region.label }))
   ] : [];
-  return /* @__PURE__ */ jsxs3("div", { className: "vc-graph", ref: wrapRef, children: [
-    /* @__PURE__ */ jsx3(
+  return /* @__PURE__ */ jsxs4("div", { className: "vc-graph", ref: wrapRef, children: [
+    /* @__PURE__ */ jsx4(
       "canvas",
       {
         "aria-label": nested ? `${t2("graph.graphLabel")} ${t2("graph.nestedHelp")}` : t2("graph.graphLabel"),
@@ -4086,38 +4268,54 @@ function GraphView(props) {
         title: nested ? t2("graph.nestedHelp") : void 0
       }
     ),
-    /* @__PURE__ */ jsx3("div", { className: "vc-legend", children: legendFolders.map((folder) => /* @__PURE__ */ jsxs3(
-      "button",
-      {
-        "aria-pressed": !hiddenFolders.has(folder),
-        "data-off": hiddenFolders.has(folder),
-        onClick: () => onToggleFolder(folder),
-        type: "button",
-        children: [
-          /* @__PURE__ */ jsx3("span", { className: "vc-dot", style: { background: hsl(colorOf(folder), 58) } }),
-          folder || "(root)"
-        ]
-      },
-      folder || "(root)"
-    )) }),
-    nested && geometry.root !== null && /* @__PURE__ */ jsx3("nav", { "aria-label": t2("graph.pathLabel"), className: "vc-crumbs", children: crumbs.map((crumb, index2) => /* @__PURE__ */ jsxs3(Fragment, { children: [
-      index2 > 0 && /* @__PURE__ */ jsx3("span", { "aria-hidden": true, children: "/" }),
-      /* @__PURE__ */ jsx3("button", { onClick: () => frame2(crumb.id), type: "button", children: crumb.label })
-    ] }, crumb.id ?? "")) }),
-    /* @__PURE__ */ jsxs3("div", { className: "vc-footer", children: [
-      /* @__PURE__ */ jsx3("button", { onClick: fit, title: t2("graph.fit"), type: "button", children: /* @__PURE__ */ jsxs3("span", { className: "vc-icon", children: [
-        /* @__PURE__ */ jsx3(Codicon2, { name: "screen-full", size: "0.8rem" }),
+    /* @__PURE__ */ jsxs4("div", { className: "vc-legend", children: [
+      legendFolders.map((folder) => /* @__PURE__ */ jsxs4(
+        "button",
+        {
+          "aria-pressed": !hiddenFolders.has(folder),
+          "data-off": hiddenFolders.has(folder),
+          onClick: () => onToggleFolder(folder),
+          type: "button",
+          children: [
+            /* @__PURE__ */ jsx4("span", { className: "vc-dot", style: { background: hsl(colorOf(folder), 58) } }),
+            folder || "(root)"
+          ]
+        },
+        folder || "(root)"
+      )),
+      /* @__PURE__ */ jsx4(
+        HiddenControls,
+        {
+          entries: [...hiddenFolders],
+          legendFolders,
+          nodes: source.nodes,
+          onClear: props.onClearHidden,
+          onShow: props.onShowPath
+        }
+      )
+    ] }),
+    nested && geometry.root !== null && /* @__PURE__ */ jsxs4("nav", { "aria-label": t2("graph.pathLabel"), className: "vc-crumbs", children: [
+      crumbs.map((crumb, index2) => /* @__PURE__ */ jsxs4(Fragment, { children: [
+        index2 > 0 && /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: "/" }),
+        /* @__PURE__ */ jsx4("button", { onClick: () => frame2(crumb.id), type: "button", children: crumb.label })
+      ] }, crumb.id ?? "")),
+      action && /* @__PURE__ */ jsx4("span", { className: "vc-hide-wrap", children: /* @__PURE__ */ jsx4("button", { onClick: actOnCurrent, type: "button", children: action.kind === "hide" ? t2("graph.hideFolder", action.path, subtreeCount(source.nodes, action.path)) : t2("graph.showFolder", action.path) }) })
+    ] }),
+    /* @__PURE__ */ jsx4("div", { "aria-live": "polite", className: "vc-sr", role: "status", children: announcement.text }, announcement.n),
+    /* @__PURE__ */ jsxs4("div", { className: "vc-footer", children: [
+      /* @__PURE__ */ jsx4("button", { onClick: fit, title: t2("graph.fit"), type: "button", children: /* @__PURE__ */ jsxs4("span", { className: "vc-icon", children: [
+        /* @__PURE__ */ jsx4(Codicon2, { name: "screen-full", size: "0.8rem" }),
         " ",
         t2("graph.fit")
       ] }) }),
-      /* @__PURE__ */ jsx3("span", { children: t2("graph.stats", graph.nodes.length, graph.edges.length) })
+      /* @__PURE__ */ jsx4("span", { children: t2("graph.stats", graph.nodes.length, graph.edges.length) })
     ] })
   ] });
 }
 
 // src/note-pane.tsx
 import { useState as useState4 } from "react";
-import { Codicon as Codicon3, host, usePluginI18n as usePluginI18n5 } from "@hermes/plugin-sdk";
+import { Codicon as Codicon3, host, usePluginI18n as usePluginI18n6 } from "@hermes/plugin-sdk";
 
 // node_modules/@marijn/find-cluster-break/src/index.js
 var rangeFrom = [];
@@ -22586,7 +22784,7 @@ var defaultKeymap = /* @__PURE__ */ [
 var indentWithTab = { key: "Tab", run: indentMore, shift: indentLess };
 
 // src/editor.tsx
-import { useEffect as useEffect3, useRef as useRef3 } from "react";
+import { useEffect as useEffect4, useRef as useRef4 } from "react";
 
 // src/md-highlight.ts
 var HIGHLIGHT_LIMIT = 3e5;
@@ -22662,7 +22860,7 @@ function computeMarks(text) {
 }
 
 // src/editor.tsx
-import { jsx as jsx4 } from "react/jsx-runtime";
+import { jsx as jsx5 } from "react/jsx-runtime";
 var WIKILINK_AT = /\[\[([^\]|#\n]+)((?:#[^\]|\n]*)?)(?:\|[^\]\n]*)?\]\]/g;
 function decorate(doc2) {
   const ranges = computeMarks(doc2).map(
@@ -22693,11 +22891,11 @@ function wikilinkAt(lineText, offset) {
   return null;
 }
 function Editor(props) {
-  const host3 = useRef3(null);
-  const viewRef = useRef3(null);
-  const latest = useRef3(props);
+  const host3 = useRef4(null);
+  const viewRef = useRef4(null);
+  const latest = useRef4(props);
   latest.current = props;
-  useEffect3(() => {
+  useEffect4(() => {
     const complete = (context) => {
       const typed = context.matchBefore(/\[\[[^\]\n|#]*/);
       if (!typed) {
@@ -22760,7 +22958,7 @@ function Editor(props) {
     };
   }, []);
   const jumpNonce = props.jump?.nonce;
-  useEffect3(() => {
+  useEffect4(() => {
     const view = viewRef.current;
     const anchor = latest.current.jump?.anchor;
     if (!view || !anchor) {
@@ -22774,19 +22972,19 @@ function Editor(props) {
     }
     latest.current.onJumped?.();
   }, [jumpNonce]);
-  return /* @__PURE__ */ jsx4("div", { className: "vc-editor", ref: host3 });
+  return /* @__PURE__ */ jsx5("div", { className: "vc-editor", ref: host3 });
 }
 
 // src/preview.tsx
-import { useEffect as useEffect4, useMemo as useMemo3, useRef as useRef4, useState as useState3 } from "react";
-import { Streamdown, usePluginI18n as usePluginI18n4 } from "@hermes/plugin-sdk";
-import { jsx as jsx5, jsxs as jsxs4 } from "react/jsx-runtime";
+import { useEffect as useEffect5, useMemo as useMemo4, useRef as useRef5, useState as useState3 } from "react";
+import { Streamdown, usePluginI18n as usePluginI18n5 } from "@hermes/plugin-sdk";
+import { jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
 var MAX_DEPTH2 = 2;
 var normalizeText = (value) => value.replace(/\s+/g, " ").trim().toLowerCase();
 function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, text, trail = [] }) {
-  const root = useRef4(null);
-  const segments2 = useMemo3(() => splitPreview(stripFrontmatter(text)), [text]);
-  useEffect4(() => {
+  const root = useRef5(null);
+  const segments2 = useMemo4(() => splitPreview(stripFrontmatter(text)), [text]);
+  useEffect5(() => {
     if (!anchor || anchor.startsWith("^")) {
       return;
     }
@@ -22797,7 +22995,7 @@ function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, text, t
     heading2?.scrollIntoView?.({ block: "start" });
     onJumped?.();
   }, [anchor, jumpNonce, text]);
-  return /* @__PURE__ */ jsx5(
+  return /* @__PURE__ */ jsx6(
     "div",
     {
       className: "vc-preview",
@@ -22810,7 +23008,7 @@ function NotePreview({ anchor, ctx, depth = 0, jumpNonce, onJumped, rel, text, t
       },
       ref: root,
       children: segments2.map(
-        (segment, index2) => segment.kind === "md" ? segment.text.trim() ? /* @__PURE__ */ jsx5(Streamdown, { children: wikilinksToMarkdown(ctx.remoteImages ? segment.text : withoutRawHtml(segment.text)) }, index2) : null : segment.kind === "image" ? /* @__PURE__ */ jsx5(PreviewImage, { ctx, fromRel: rel, segment }, index2) : segment.kind === "remote" ? /* @__PURE__ */ jsx5(RemoteImage, { ctx, segment }, index2) : /* @__PURE__ */ jsx5(
+        (segment, index2) => segment.kind === "md" ? segment.text.trim() ? /* @__PURE__ */ jsx6(Streamdown, { children: wikilinksToMarkdown(ctx.remoteImages ? segment.text : withoutRawHtml(segment.text)) }, index2) : null : segment.kind === "image" ? /* @__PURE__ */ jsx6(PreviewImage, { ctx, fromRel: rel, segment }, index2) : segment.kind === "remote" ? /* @__PURE__ */ jsx6(RemoteImage, { ctx, segment }, index2) : /* @__PURE__ */ jsx6(
           EmbeddedNote,
           {
             anchor: segment.anchor,
@@ -22831,10 +23029,10 @@ function PreviewImage({
   fromRel,
   segment
 }) {
-  const t2 = usePluginI18n4(PLUGIN_ID);
+  const t2 = usePluginI18n5(PLUGIN_ID);
   const [state, setState] = useState3(null);
   const assetRel = ctx.resolveAsset(segment.target, fromRel);
-  useEffect4(() => {
+  useEffect5(() => {
     let live = true;
     setState(null);
     if (assetRel) {
@@ -22847,7 +23045,7 @@ function PreviewImage({
     };
   }, [assetRel, ctx]);
   if (state?.url) {
-    return /* @__PURE__ */ jsx5(
+    return /* @__PURE__ */ jsx6(
       "img",
       {
         alt: segment.alt || noteTitle(segment.target),
@@ -22856,7 +23054,7 @@ function PreviewImage({
       }
     );
   }
-  return state ? /* @__PURE__ */ jsx5("div", { className: "vc-dim", children: t2("preview.imageMissing", segment.target) }) : null;
+  return state ? /* @__PURE__ */ jsx6("div", { className: "vc-dim", children: t2("preview.imageMissing", segment.target) }) : null;
 }
 var hostOf = (url) => {
   try {
@@ -22866,9 +23064,9 @@ var hostOf = (url) => {
   }
 };
 function RemoteImage({ ctx, segment }) {
-  const t2 = usePluginI18n4(PLUGIN_ID);
+  const t2 = usePluginI18n5(PLUGIN_ID);
   if (ctx.remoteImages) {
-    return /* @__PURE__ */ jsx5(
+    return /* @__PURE__ */ jsx6(
       "img",
       {
         alt: segment.alt,
@@ -22879,9 +23077,9 @@ function RemoteImage({ ctx, segment }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxs4("div", { className: "vc-remote", children: [
-    /* @__PURE__ */ jsx5("span", { title: segment.url, children: t2("preview.remoteBlocked", segment.alt, hostOf(segment.url)) }),
-    /* @__PURE__ */ jsx5("button", { className: "vc-btn", onClick: ctx.onLoadRemoteImages, title: t2("preview.remoteWhy"), type: "button", children: t2("preview.remoteLoad") })
+  return /* @__PURE__ */ jsxs5("div", { className: "vc-remote", children: [
+    /* @__PURE__ */ jsx6("span", { title: segment.url, children: t2("preview.remoteBlocked", segment.alt, hostOf(segment.url)) }),
+    /* @__PURE__ */ jsx6("button", { className: "vc-btn", onClick: ctx.onLoadRemoteImages, title: t2("preview.remoteWhy"), type: "button", children: t2("preview.remoteLoad") })
   ] });
 }
 function EmbeddedNote({
@@ -22892,11 +23090,11 @@ function EmbeddedNote({
   target,
   trail
 }) {
-  const t2 = usePluginI18n4(PLUGIN_ID);
+  const t2 = usePluginI18n5(PLUGIN_ID);
   const rel = ctx.resolveNote(parseLinkTarget(target).note);
   const [text, setText] = useState3(void 0);
   const blocked = depth >= MAX_DEPTH2 || rel !== void 0 && trail.includes(rel);
-  useEffect4(() => {
+  useEffect5(() => {
     let live = true;
     setText(void 0);
     if (rel && !blocked) {
@@ -22907,10 +23105,10 @@ function EmbeddedNote({
     };
   }, [blocked, ctx, rel]);
   if (!rel) {
-    return /* @__PURE__ */ jsx5("div", { className: "vc-dim", children: t2("preview.embedMissing", target) });
+    return /* @__PURE__ */ jsx6("div", { className: "vc-dim", children: t2("preview.embedMissing", target) });
   }
-  return /* @__PURE__ */ jsxs4("div", { className: "vc-embed", children: [
-    /* @__PURE__ */ jsxs4(
+  return /* @__PURE__ */ jsxs5("div", { className: "vc-embed", children: [
+    /* @__PURE__ */ jsxs5(
       "button",
       {
         className: "vc-embed-title",
@@ -22924,15 +23122,15 @@ function EmbeddedNote({
         ]
       }
     ),
-    blocked ? /* @__PURE__ */ jsx5("div", { className: "vc-dim", children: t2("preview.embedTooDeep") }) : text ? /* @__PURE__ */ jsx5(NotePreview, { ctx, depth: depth + 1, rel, text: sectionOf(text, anchor), trail }) : text === null ? /* @__PURE__ */ jsx5("div", { className: "vc-dim", children: t2("preview.embedMissing", target) }) : null
+    blocked ? /* @__PURE__ */ jsx6("div", { className: "vc-dim", children: t2("preview.embedTooDeep") }) : text ? /* @__PURE__ */ jsx6(NotePreview, { ctx, depth: depth + 1, rel, text: sectionOf(text, anchor), trail }) : text === null ? /* @__PURE__ */ jsx6("div", { className: "vc-dim", children: t2("preview.embedMissing", target) }) : null
   ] });
 }
 
 // src/note-pane.tsx
-import { Fragment as Fragment2, jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
 function NotePane(props) {
   const { active, notes } = props;
-  const t2 = usePluginI18n5(PLUGIN_ID);
+  const t2 = usePluginI18n6(PLUGIN_ID);
   const [preview, setPreview] = useState4(/* @__PURE__ */ new Set());
   const note = notes.find((item) => item.rel === active);
   const jump = props.jump && props.jump.rel === active ? props.jump : null;
@@ -22947,26 +23145,26 @@ function NotePane(props) {
   const addToChat = (item) => {
     void host.composer?.insertText(null, fileRef(item.path), { mode: "inline" });
   };
-  return /* @__PURE__ */ jsxs5("div", { className: "vc-pane", children: [
-    /* @__PURE__ */ jsx6("div", { "aria-label": t2("note.openNotes"), className: "vc-tabs", role: "tablist", children: notes.map((item) => /* @__PURE__ */ jsxs5("div", { "aria-selected": item.rel === active, className: "vc-tab", role: "tab", children: [
-      /* @__PURE__ */ jsx6("button", { onClick: () => props.onActivate(item.rel), title: item.rel, type: "button", children: noteTitle(item.rel) }),
-      item.draft !== item.base && /* @__PURE__ */ jsx6("span", { "aria-label": t2("note.unsaved"), className: "vc-unsaved" }),
-      /* @__PURE__ */ jsx6("button", { "aria-label": t2("common.close"), onClick: () => props.onClose(item.rel), title: t2("common.close"), type: "button", children: /* @__PURE__ */ jsx6(Codicon3, { name: "close", size: "0.75rem" }) })
+  return /* @__PURE__ */ jsxs6("div", { className: "vc-pane", children: [
+    /* @__PURE__ */ jsx7("div", { "aria-label": t2("note.openNotes"), className: "vc-tabs", role: "tablist", children: notes.map((item) => /* @__PURE__ */ jsxs6("div", { "aria-selected": item.rel === active, className: "vc-tab", role: "tab", children: [
+      /* @__PURE__ */ jsx7("button", { onClick: () => props.onActivate(item.rel), title: item.rel, type: "button", children: noteTitle(item.rel) }),
+      item.draft !== item.base && /* @__PURE__ */ jsx7("span", { "aria-label": t2("note.unsaved"), className: "vc-unsaved" }),
+      /* @__PURE__ */ jsx7("button", { "aria-label": t2("common.close"), onClick: () => props.onClose(item.rel), title: t2("common.close"), type: "button", children: /* @__PURE__ */ jsx7(Codicon3, { name: "close", size: "0.75rem" }) })
     ] }, item.rel)) }),
-    note ? /* @__PURE__ */ jsxs5(Fragment2, { children: [
-      /* @__PURE__ */ jsxs5("div", { className: "vc-subbar", children: [
-        /* @__PURE__ */ jsx6("span", { className: "vc-path", children: note.rel }),
-        /* @__PURE__ */ jsx6("span", { "aria-live": "polite", children: status(note) }),
-        host.composer && /* @__PURE__ */ jsx6("button", { className: "vc-pill", onClick: () => addToChat(note), title: t2("note.addToChat"), type: "button", children: t2("note.addToChat") }),
-        /* @__PURE__ */ jsx6("button", { className: "vc-pill", onClick: () => togglePreview(note.rel), type: "button", children: preview.has(note.rel) ? t2("note.edit") : t2("note.preview") })
+    note ? /* @__PURE__ */ jsxs6(Fragment2, { children: [
+      /* @__PURE__ */ jsxs6("div", { className: "vc-subbar", children: [
+        /* @__PURE__ */ jsx7("span", { className: "vc-path", children: note.rel }),
+        /* @__PURE__ */ jsx7("span", { "aria-live": "polite", children: status(note) }),
+        host.composer && /* @__PURE__ */ jsx7("button", { className: "vc-pill", onClick: () => addToChat(note), title: t2("note.addToChat"), type: "button", children: t2("note.addToChat") }),
+        /* @__PURE__ */ jsx7("button", { className: "vc-pill", onClick: () => togglePreview(note.rel), type: "button", children: preview.has(note.rel) ? t2("note.edit") : t2("note.preview") })
       ] }),
-      note.status === "conflict" && /* @__PURE__ */ jsxs5("div", { className: "vc-banner vc-danger", role: "alert", children: [
-        /* @__PURE__ */ jsx6("span", { style: { flex: 1 }, children: note.error ?? t2("note.changedOnDisk") }),
-        /* @__PURE__ */ jsx6("button", { className: "vc-pill", onClick: () => props.onReload(note.rel), type: "button", children: t2("note.reload") }),
-        /* @__PURE__ */ jsx6("button", { className: "vc-pill", onClick: () => props.onSave(note.rel, true), type: "button", children: t2("note.overwrite") })
+      note.status === "conflict" && /* @__PURE__ */ jsxs6("div", { className: "vc-banner vc-danger", role: "alert", children: [
+        /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: note.error ?? t2("note.changedOnDisk") }),
+        /* @__PURE__ */ jsx7("button", { className: "vc-pill", onClick: () => props.onReload(note.rel), type: "button", children: t2("note.reload") }),
+        /* @__PURE__ */ jsx7("button", { className: "vc-pill", onClick: () => props.onSave(note.rel, true), type: "button", children: t2("note.overwrite") })
       ] }),
-      note.status === "error" && /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-danger", role: "alert", children: note.error }),
-      /* @__PURE__ */ jsx6("div", { className: "vc-body", children: note.status === "loading" ? /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-dim", children: t2("note.loading") }) : preview.has(note.rel) ? /* @__PURE__ */ jsx6(
+      note.status === "error" && /* @__PURE__ */ jsx7("div", { className: "vc-banner vc-danger", role: "alert", children: note.error }),
+      /* @__PURE__ */ jsx7("div", { className: "vc-body", children: note.status === "loading" ? /* @__PURE__ */ jsx7("div", { className: "vc-banner vc-dim", children: t2("note.loading") }) : preview.has(note.rel) ? /* @__PURE__ */ jsx7(
         NotePreview,
         {
           anchor: jump?.anchor,
@@ -22976,7 +23174,7 @@ function NotePane(props) {
           rel: note.rel,
           text: note.draft
         }
-      ) : /* @__PURE__ */ jsx6(
+      ) : /* @__PURE__ */ jsx7(
         Editor,
         {
           getTitles: props.getTitles,
@@ -22989,41 +23187,41 @@ function NotePane(props) {
         },
         `${note.rel}:${note.generation}`
       ) }),
-      props.backlinks(note.rel).length > 0 && /* @__PURE__ */ jsxs5("div", { className: "vc-backlinks", children: [
-        /* @__PURE__ */ jsx6("span", { style: { marginRight: 6 }, children: t2("note.backlinks") }),
-        props.backlinks(note.rel).map((rel) => /* @__PURE__ */ jsx6("button", { onClick: () => props.onOpenRel(rel), type: "button", children: noteTitle(rel) }, rel))
+      props.backlinks(note.rel).length > 0 && /* @__PURE__ */ jsxs6("div", { className: "vc-backlinks", children: [
+        /* @__PURE__ */ jsx7("span", { style: { marginRight: 6 }, children: t2("note.backlinks") }),
+        props.backlinks(note.rel).map((rel) => /* @__PURE__ */ jsx7("button", { onClick: () => props.onOpenRel(rel), type: "button", children: noteTitle(rel) }, rel))
       ] })
-    ] }) : /* @__PURE__ */ jsx6("div", { className: "vc-banner vc-dim", children: t2("empty.openNote") })
+    ] }) : /* @__PURE__ */ jsx7("div", { className: "vc-banner vc-dim", children: t2("empty.openNote") })
   ] });
 }
 
 // src/workspace.tsx
-import { Fragment as Fragment3, jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
+import { Fragment as Fragment3, jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 var FULL_RESCAN_LIMIT = 1500;
 var STEP = 0.05;
 function VaultWorkspace({ fs, prefs: prefsStore, store }) {
-  const t2 = usePluginI18n6(PLUGIN_ID);
+  const t2 = usePluginI18n7(PLUGIN_ID);
   const state = useSyncExternalStore2(store.subscribe, store.get);
   const prefs = useSyncExternalStore2(prefsStore.subscribe, prefsStore.get);
-  const areaRef = useRef5(null);
+  const areaRef = useRef6(null);
   const [search, setSearch] = useState5("");
   const [local, setLocal] = useState5(false);
-  useEffect5(() => {
+  useEffect6(() => {
     const onFocus = () => void store.scan(store.get().notes.length < FULL_RESCAN_LIMIT ? "full" : "dirs");
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [store]);
-  useEffect5(() => {
+  useEffect6(() => {
     const onBlur = () => void store.flushAll();
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
   }, [store]);
   const { active, graph, notes, root, tabs, vault } = state;
-  const hiddenInGraph = useMemo4(() => new Set(vault.hiddenInGraph), [vault.hiddenInGraph]);
-  const pinned = useMemo4(() => new Set(vault.pinned), [vault.pinned]);
-  const expanded = useMemo4(() => new Set(vault.expanded), [vault.expanded]);
-  const openRels = useMemo4(() => new Set(tabs.map((tab) => tab.rel)), [tabs]);
-  const shown = useMemo4(
+  const hiddenInGraph = useMemo5(() => new Set(vault.hiddenInGraph), [vault.hiddenInGraph]);
+  const pinned = useMemo5(() => new Set(vault.pinned), [vault.pinned]);
+  const expanded = useMemo5(() => new Set(vault.expanded), [vault.expanded]);
+  const openRels = useMemo5(() => new Set(tabs.map((tab) => tab.rel)), [tabs]);
+  const shown = useMemo5(
     () => filterGraph(graph, {
       hiddenFolders: hiddenInGraph,
       local: local && active ? { depth: 1, rel: active } : null,
@@ -23031,11 +23229,11 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
     }),
     [active, graph, hiddenInGraph, local, prefs.showOrphans]
   );
-  const legendFolders = useMemo4(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
+  const legendFolders = useMemo5(() => [...new Set(graph.nodes.map((node) => node.folder))].sort(), [graph]);
   const getTitles = useCallback(() => store.get().notes.map((note) => noteTitle(note.rel)), [store]);
-  const resolveAsset = useMemo4(() => assetResolver(state.assets.map((asset) => asset.rel)), [state.assets]);
-  const resolveNote = useMemo4(() => linkResolver(notes.map((note) => note.rel)), [notes]);
-  const previewCtx = useMemo4(
+  const resolveAsset = useMemo5(() => assetResolver(state.assets.map((asset) => asset.rel)), [state.assets]);
+  const resolveNote = useMemo5(() => linkResolver(notes.map((note) => note.rel)), [notes]);
+  const previewCtx = useMemo5(
     () => ({
       imageUrl: (rel) => store.imageUrl(rel),
       noteText: (rel) => store.noteText(rel),
@@ -23081,16 +23279,16 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
     window.addEventListener("pointerup", stop);
   };
   if (!root) {
-    return /* @__PURE__ */ jsx7("div", { className: "vc-root", children: /* @__PURE__ */ jsxs6("div", { className: "vc-empty", children: [
-      /* @__PURE__ */ jsx7(Codicon4, { name: "folder-library", size: "2rem" }),
-      /* @__PURE__ */ jsx7("div", { children: t2("empty.chooseHint") }),
-      /* @__PURE__ */ jsx7("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
+    return /* @__PURE__ */ jsx8("div", { className: "vc-root", children: /* @__PURE__ */ jsxs7("div", { className: "vc-empty", children: [
+      /* @__PURE__ */ jsx8(Codicon4, { name: "folder-library", size: "2rem" }),
+      /* @__PURE__ */ jsx8("div", { children: t2("empty.chooseHint") }),
+      /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
     ] }) });
   }
   const hasNotes = tabs.length > 0;
   const frac = hasNotes ? prefs.noteFrac : 0;
-  return /* @__PURE__ */ jsxs6("div", { className: "vc-root", children: [
-    /* @__PURE__ */ jsx7("div", { className: "vc-tree-col", style: { width: prefs.treeOpen ? "15rem" : "1.75rem" }, children: prefs.treeOpen ? /* @__PURE__ */ jsx7(
+  return /* @__PURE__ */ jsxs7("div", { className: "vc-root", children: [
+    /* @__PURE__ */ jsx8("div", { className: "vc-tree-col", style: { width: prefs.treeOpen ? "15rem" : "1.75rem" }, children: prefs.treeOpen ? /* @__PURE__ */ jsx8(
       FileTree,
       {
         activeRel: active,
@@ -23111,7 +23309,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
         showHidden: prefs.showHidden,
         vaults: prefs.vaults
       }
-    ) : /* @__PURE__ */ jsx7(
+    ) : /* @__PURE__ */ jsx8(
       "button",
       {
         "aria-label": t2("tree.expand"),
@@ -23120,15 +23318,15 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
         style: { height: "2rem", width: "100%" },
         title: t2("tree.expand"),
         type: "button",
-        children: /* @__PURE__ */ jsx7(Codicon4, { name: "chevron-right", size: "0.8rem" })
+        children: /* @__PURE__ */ jsx8(Codicon4, { name: "chevron-right", size: "0.8rem" })
       }
     ) }),
-    /* @__PURE__ */ jsxs6("div", { style: { display: "flex", flex: 1, flexDirection: "column", minHeight: 0, minWidth: 0 }, children: [
-      warningKey && warningKey !== dismissedWarnings && /* @__PURE__ */ jsxs6("div", { className: "vc-banner vc-danger", role: "alert", children: [
-        /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: warnings.map((item) => t2(`warn.${item.kind}`, item.path)).join(" ") }),
-        /* @__PURE__ */ jsx7("button", { className: "vc-btn", onClick: () => setDismissedWarnings(warningKey), type: "button", children: t2("warn.dismiss") })
+    /* @__PURE__ */ jsxs7("div", { style: { display: "flex", flex: 1, flexDirection: "column", minHeight: 0, minWidth: 0 }, children: [
+      warningKey && warningKey !== dismissedWarnings && /* @__PURE__ */ jsxs7("div", { className: "vc-banner vc-danger", role: "alert", children: [
+        /* @__PURE__ */ jsx8("span", { style: { flex: 1 }, children: warnings.map((item) => t2(`warn.${item.kind}`, item.path)).join(" ") }),
+        /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => setDismissedWarnings(warningKey), type: "button", children: t2("warn.dismiss") })
       ] }),
-      state.notice && /* @__PURE__ */ jsx7(
+      state.notice && /* @__PURE__ */ jsx8(
         "button",
         {
           className: `vc-notice ${state.notice.kind === "error" ? "vc-danger" : "vc-dim"}`,
@@ -23138,7 +23336,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
           children: state.notice.text
         }
       ),
-      /* @__PURE__ */ jsxs6(
+      /* @__PURE__ */ jsxs7(
         "div",
         {
           className: "vc-main",
@@ -23147,11 +23345,23 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
             gridTemplateColumns: hasNotes ? `minmax(0,${1 - frac}fr) 6px minmax(0,${frac}fr)` : "minmax(0,1fr)"
           },
           children: [
-            /* @__PURE__ */ jsxs6("div", { className: "vc-graph-wrap", style: { minHeight: 0, minWidth: 0, overflow: "hidden", position: "relative" }, children: [
-              state.status.error ? /* @__PURE__ */ jsxs6("div", { className: "vc-banner vc-danger", children: [
-                /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: state.status.error === NO_ACCESS ? t2("empty.noAccess") : state.status.error }),
-                /* @__PURE__ */ jsx7("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
-              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsx7("div", { className: "vc-empty", children: t2("empty.noNotes") }) : /* @__PURE__ */ jsx7(
+            /* @__PURE__ */ jsxs7("div", { className: "vc-graph-wrap", style: { minHeight: 0, minWidth: 0, overflow: "hidden", position: "relative" }, children: [
+              state.status.error ? /* @__PURE__ */ jsxs7("div", { className: "vc-banner vc-danger", children: [
+                /* @__PURE__ */ jsx8("span", { style: { flex: 1 }, children: state.status.error === NO_ACCESS ? t2("empty.noAccess") : state.status.error }),
+                /* @__PURE__ */ jsx8("button", { className: "vc-btn", onClick: () => void pickVault(), type: "button", children: t2("empty.chooseVault") })
+              ] }) : !state.status.loading && notes.length === 0 ? /* @__PURE__ */ jsxs7("div", { className: "vc-empty", children: [
+                /* @__PURE__ */ jsx8("div", { children: t2("empty.noNotes") }),
+                /* @__PURE__ */ jsx8(
+                  HiddenControls,
+                  {
+                    entries: vault.hiddenInGraph,
+                    legendFolders,
+                    nodes: graph.nodes,
+                    onClear: () => store.clearHiddenInGraph(),
+                    onShow: (path) => store.showInGraph(path)
+                  }
+                )
+              ] }) : /* @__PURE__ */ jsx8(
                 GraphView,
                 {
                   cluster: prefs.cluster,
@@ -23160,7 +23370,10 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   hiddenFolders: hiddenInGraph,
                   labels: prefs.labels,
                   legendFolders,
+                  onClearHidden: () => store.clearHiddenInGraph(),
+                  onHidePath: (path) => store.hideInGraph(path),
                   onOpen: openRel,
+                  onShowPath: (path) => store.showInGraph(path),
                   nestedPositions: vault.nestedPositions,
                   onNestedPositions: (positions) => store.setNestedPositions(positions),
                   onPositions: (mode, positions) => store.setPositions(mode, positions),
@@ -23175,8 +23388,8 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   touched: state.touched
                 }
               ),
-              /* @__PURE__ */ jsxs6("div", { className: "vc-toolbar", children: [
-                /* @__PURE__ */ jsx7(
+              /* @__PURE__ */ jsxs7("div", { className: "vc-toolbar", children: [
+                /* @__PURE__ */ jsx8(
                   "input",
                   {
                     "aria-label": t2("graph.search"),
@@ -23191,7 +23404,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                     value: search
                   }
                 ),
-                /* @__PURE__ */ jsx7(
+                /* @__PURE__ */ jsx8(
                   "button",
                   {
                     "aria-pressed": local,
@@ -23201,10 +23414,10 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                     onClick: () => setLocal(!local),
                     title: t2("graph.local"),
                     type: "button",
-                    children: /* @__PURE__ */ jsx7(Codicon4, { name: "target", size: "0.85rem" })
+                    children: /* @__PURE__ */ jsx8(Codicon4, { name: "target", size: "0.85rem" })
                   }
                 ),
-                /* @__PURE__ */ jsx7(
+                /* @__PURE__ */ jsx8(
                   "button",
                   {
                     "aria-pressed": prefs.showOrphans,
@@ -23213,14 +23426,14 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                     onClick: () => prefsStore.set({ showOrphans: !prefs.showOrphans }),
                     title: t2("graph.orphans"),
                     type: "button",
-                    children: /* @__PURE__ */ jsx7(Codicon4, { name: "circle-small", size: "0.95rem" })
+                    children: /* @__PURE__ */ jsx8(Codicon4, { name: "circle-small", size: "0.95rem" })
                   }
                 ),
-                state.status.loading && /* @__PURE__ */ jsx7("span", { className: "vc-dim", children: "\u2026" })
+                state.status.loading && /* @__PURE__ */ jsx8("span", { className: "vc-dim", children: "\u2026" })
               ] })
             ] }),
-            hasNotes && /* @__PURE__ */ jsxs6(Fragment3, { children: [
-              /* @__PURE__ */ jsx7(
+            hasNotes && /* @__PURE__ */ jsxs7(Fragment3, { children: [
+              /* @__PURE__ */ jsx8(
                 "div",
                 {
                   "aria-orientation": "vertical",
@@ -23241,7 +23454,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   tabIndex: 0
                 }
               ),
-              /* @__PURE__ */ jsx7("div", { style: { minHeight: 0, minWidth: 0, overflow: "hidden" }, children: /* @__PURE__ */ jsx7(
+              /* @__PURE__ */ jsx8("div", { style: { minHeight: 0, minWidth: 0, overflow: "hidden" }, children: /* @__PURE__ */ jsx8(
                 NotePane,
                 {
                   active,
@@ -23269,7 +23482,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
 }
 
 // src/plugin.tsx
-import { jsx as jsx8 } from "react/jsx-runtime";
+import { jsx as jsx9 } from "react/jsx-runtime";
 var DIRECTIVE_NAME = "vault";
 var SAFE_TARGET = /^[^\u0000-\u001f]{1,300}$/;
 var plugin = {
@@ -23301,7 +23514,7 @@ var plugin = {
           }
           close = null;
         },
-        render: () => /* @__PURE__ */ jsx8(VaultWorkspace, { fs, prefs, store: current }),
+        render: () => /* @__PURE__ */ jsx9(VaultWorkspace, { fs, prefs, store: current }),
         title: ctx.i18n.t("vault.title")
       });
       return current;
@@ -23318,7 +23531,7 @@ var plugin = {
     ctx.registerSettingsPage?.({
       icon: "type-hierarchy",
       id: "settings",
-      render: () => /* @__PURE__ */ jsx8(VaultSettings, { fs, prefs }),
+      render: () => /* @__PURE__ */ jsx9(VaultSettings, { fs, prefs }),
       title: ctx.i18n.t("vault.title")
     });
     const contributions = [
@@ -23353,11 +23566,11 @@ var plugin = {
           render: ({ attrs, source }) => {
             const target = (attrs.note ?? "").trim();
             if (!SAFE_TARGET.test(target)) {
-              return /* @__PURE__ */ jsx8("span", { children: source });
+              return /* @__PURE__ */ jsx9("span", { children: source });
             }
             const { anchor, note } = parseLinkTarget(target);
             const label = `${noteTitle(note)}${anchor ? ` \u203A ${anchor}` : ""}`;
-            return /* @__PURE__ */ jsx8(
+            return /* @__PURE__ */ jsx9(
               "button",
               {
                 className: "vc-chip",
@@ -23378,7 +23591,7 @@ var plugin = {
         area: statusArea,
         data: {
           actionId: "hermes-plexus.open",
-          icon: /* @__PURE__ */ jsx8(Codicon5, { name: "type-hierarchy", size: "0.8125rem" }),
+          icon: /* @__PURE__ */ jsx9(Codicon5, { name: "type-hierarchy", size: "0.8125rem" }),
           id: "hermes-plexus",
           label: ctx.i18n.t("vault.title"),
           onSelect: () => void open(),

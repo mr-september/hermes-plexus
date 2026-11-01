@@ -4,6 +4,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { clampScale, frameDisc, type View, zoomLimits, zoomPath } from './camera'
+import { HiddenControls } from './hidden-controls'
+import { coveringEntry, isHiddenDir, subtreeCount } from './hidden'
 import { PLUGIN_ID } from './i18n'
 import {
   clampToDisc,
@@ -55,7 +57,7 @@ export interface GraphViewProps {
   cluster: ClusterMode
   /** The whole vault's graph. Nested region geometry comes from it, so filters never repack the map. Defaults to `graph`. */
   fullGraph?: VaultGraph
-  /** Folders hidden via the legend (still listed there so they can be turned back on). */
+  /** Folder paths hidden from the graph; each covers its subtree. Every entry has a control that removes it. */
   hiddenFolders: ReadonlySet<string>
   graph: VaultGraph
   labels: LabelMode
@@ -63,10 +65,16 @@ export interface GraphViewProps {
   legendFolders: readonly string[]
   /** Compartment-relative positions of the nested layout. */
   nestedPositions?: Record<string, Offset>
+  /** Remove every hidden entry. */
+  onClearHidden: () => void
+  /** Hide a folder's subtree; says what already covered it, if anything. */
+  onHidePath: (path: string) => { coveredBy: null | string }
   onNestedPositions?: (positions: Record<string, Offset>) => void
   onOpen: (rel: string) => void
   /** Optional probe: the duration of each canvas paint, in ms (for measurement; costs two clock reads when set). */
   onPaintTime?: (ms: number) => void
+  /** Remove exactly one hidden entry. */
+  onShowPath: (path: string) => void
   onPositions: (mode: 'folder' | 'none', positions: Record<string, [number, number]>) => void
   onToggleFolder: (folder: string) => void
   onTogglePin: (rel: string) => void
@@ -192,7 +200,17 @@ export function GraphView(props: GraphViewProps) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
 
-    const disc = (cx: number, cy: number, r: number, hue: number, depth: number, lit: boolean, empty: boolean, own: boolean) => {
+    const disc = (
+      cx: number,
+      cy: number,
+      r: number,
+      hue: number,
+      depth: number,
+      lit: boolean,
+      empty: boolean,
+      own: boolean,
+      dashed: boolean
+    ) => {
       const recede = focusId !== null && !lit
       const faint = empty ? 0.35 : 1
 
@@ -201,10 +219,20 @@ export function GraphView(props: GraphViewProps) {
       ctx.globalAlpha = (own ? 0.05 : 0.16 / (1 + 0.45 * depth)) * (lit ? 1.7 : recede ? 0.45 : 1) * faint
       ctx.fillStyle = hsl(hue, Math.min(72, 50 + 4 * depth))
       ctx.fill()
-      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * faint
+      // A hidden region's dashed outline keeps full strength so it stays readable while its fill is faint.
+      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * (dashed ? 1 : faint)
       ctx.strokeStyle = hsl(hue, Math.min(72, 54 + 4 * depth))
       ctx.lineWidth = (lit ? 1.8 : 1) / k
+
+      if (dashed) {
+        ctx.setLineDash([5 / k, 4 / k])
+      }
+
       ctx.stroke()
+
+      if (dashed) {
+        ctx.setLineDash([])
+      }
     }
 
     // A region whose children are not drawn yet is a plain disc; labels need room to be legible.
@@ -233,20 +261,35 @@ export function GraphView(props: GraphViewProps) {
       // Above the band (the region has outgrown the viewport) only the outline — which is off screen — remains.
       // The vault root stays in the geometry (it holds the packing together and anchors the camera fits and
       // the breadcrumb) but is not drawn: its disc is only the enclosure of the top-level folders.
+      const hiddenSet = live.current.hiddenFolders
+      // A region is hidden by saved path coverage (its own entry or an ancestor's), not by having no shown note.
+      const hidden = region.id !== '' && isHiddenDir(hiddenSet, region.id)
+
       if (!covers && region.id !== '') {
-        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false)
+        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false, hidden)
       }
 
       const comp = region.compartment
 
       if (comp && region.children.length && comp.r * k >= REGION_MIN_PX) {
-        disc(comp.x, comp.y, comp.r, hue, region.depth + 1, lit, !occupiedRef.current.has(region.id), true)
+        disc(
+          comp.x,
+          comp.y,
+          comp.r,
+          hue,
+          region.depth + 1,
+          lit,
+          !occupiedRef.current.has(region.id),
+          true,
+          region.id === '' ? hiddenSet.has('') : hidden
+        )
       }
 
       const forced = region.id === focusId || region.id === currentRef.current
 
       if (region.label && !covers && (s >= LABEL_MIN_PX || forced)) {
-        const width = ctx.measureText(region.label).width
+        const text = hidden ? `${region.label} ${t('graph.hiddenSuffix')}` : region.label
+        const width = ctx.measureText(text).width
         const half = width / 2 + 3 / k
         const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r
         const dy = Math.max(3 / k, room)
@@ -266,7 +309,7 @@ export function GraphView(props: GraphViewProps) {
             labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id })
             ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85
             ctx.fillStyle = ink
-            ctx.fillText(region.label, region.x, box[1])
+            ctx.fillText(text, region.x, box[1])
           }
         }
       }
@@ -972,6 +1015,48 @@ export function GraphView(props: GraphViewProps) {
     draw()
   }
 
+  // Hide or show the camera's folder (never the hovered one: the pointer leaves the canvas to reach the button).
+  // The target is the folder's own entry, else the deepest ancestor entry covering it, else the folder itself.
+  const currentRegion = nested && current !== null ? geometry.regions.get(current) : undefined
+  const covering = currentRegion ? coveringEntry(hiddenFolders, currentRegion.id) : null
+
+  const action: null | { kind: 'hide' | 'show'; path: string } = currentRegion
+    ? covering === null
+      ? { kind: 'hide', path: currentRegion.id }
+      : { kind: 'show', path: covering }
+    : null
+
+  const [announcement, setAnnouncement] = useState({ n: 0, text: '' })
+
+  const announce = (text: string) => setAnnouncement(previous => ({ n: previous.n + 1, text }))
+
+  const actOnCurrent = () => {
+    if (!action || !currentRegion) {
+      return
+    }
+
+    if (action.kind === 'hide') {
+      const { coveredBy } = props.onHidePath(action.path)
+
+      announce(
+        coveredBy === null
+          ? t('graph.announceHid', action.path, subtreeCount(source.nodes, action.path))
+          : t('graph.announceCovered', action.path, coveredBy)
+      )
+
+      return
+    }
+
+    const rest = new Set(hiddenFolders)
+
+    rest.delete(action.path)
+    props.onShowPath(action.path)
+
+    const still = coveringEntry(rest, currentRegion.id)
+
+    announce(still === null ? t('graph.announceShown', action.path) : t('graph.announceStill', action.path, still))
+  }
+
   // Keyboard: arrows hop to the linked note nearest that direction, Enter opens, P pins, Escape goes up a folder.
   const onKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (event.key === 'Escape') {
@@ -980,6 +1065,18 @@ export function GraphView(props: GraphViewProps) {
       if (nested && region) {
         event.preventDefault()
         frame(region.parent)
+      }
+
+      return
+    }
+
+    if (event.key.toLowerCase() === 'h' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (nested) {
+        event.preventDefault()
+
+        if (!event.repeat) {
+          actOnCurrent()
+        }
       }
 
       return
@@ -1092,6 +1189,13 @@ export function GraphView(props: GraphViewProps) {
             {folder || '(root)'}
           </button>
         ))}
+        <HiddenControls
+          entries={[...hiddenFolders]}
+          legendFolders={legendFolders}
+          nodes={source.nodes}
+          onClear={props.onClearHidden}
+          onShow={props.onShowPath}
+        />
       </div>
       {nested && geometry.root !== null && (
         <nav aria-label={t('graph.pathLabel')} className="vc-crumbs">
@@ -1103,8 +1207,20 @@ export function GraphView(props: GraphViewProps) {
               </button>
             </Fragment>
           ))}
+          {action && (
+            <span className="vc-hide-wrap">
+              <button onClick={actOnCurrent} type="button">
+                {action.kind === 'hide'
+                  ? t('graph.hideFolder', action.path, subtreeCount(source.nodes, action.path))
+                  : t('graph.showFolder', action.path)}
+              </button>
+            </span>
+          )}
         </nav>
       )}
+      <div aria-live="polite" className="vc-sr" key={announcement.n} role="status">
+        {announcement.text}
+      </div>
       <div className="vc-footer">
         <button onClick={fit} title={t('graph.fit')} type="button">
           <span className="vc-icon">

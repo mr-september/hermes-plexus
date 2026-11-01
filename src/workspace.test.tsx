@@ -123,6 +123,24 @@ describe('VaultWorkspace', () => {
     expect(pick).toHaveBeenCalled()
   })
 
+  it('keeps recovery controls beside the no-notes message, so stale hidden entries can still be cleared', async () => {
+    await store.dispose()
+    disk = new FakeDisk('C:\v', {})
+    store = new VaultStore(disk.bridge, prefs, (key, ...args) => `${key}:${args.join('|')}`)
+    store.start()
+    await waitFor(() => expect(store.get().status.loading).toBe(false))
+    store.hideInGraph('Gone')
+    store.hideInGraph('Old/Deep')
+    mount()
+
+    await screen.findByText('No notes found in this folder.')
+    fireEvent.click(screen.getByRole('button', { name: 'Show Gone' }))
+    expect(store.get().vault.hiddenInGraph).toEqual(['Old/Deep'])
+    fireEvent.click(await screen.findByRole('button', { name: 'Show Old/Deep' }))
+    expect(store.get().vault.hiddenInGraph).toEqual([])
+    expect(screen.queryByRole('group', { name: 'Hidden' })).toBeNull()
+  })
+
   it('collapses the note pane to nothing and back via the keyboard-operable divider', async () => {
     mount()
     fireEvent.click(await screen.findByText('Alpha'))

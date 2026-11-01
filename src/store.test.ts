@@ -301,3 +301,28 @@ describe('links with anchors, images and embeds', () => {
     expect(await store.noteText('Nope.md')).toBeNull()
   })
 })
+
+describe('hiding folders in the graph', () => {
+  it('adds an uncovered path, ignores a covered one, and removes exactly the named entry', async () => {
+    await ready()
+
+    expect(store.hideInGraph('Concepts/Deep')).toEqual({ coveredBy: null })
+    expect(store.hideInGraph('Concepts')).toEqual({ coveredBy: null })
+    expect(store.hideInGraph('Concepts/Deep/More')).toEqual({ coveredBy: 'Concepts/Deep' })
+    expect(store.get().vault.hiddenInGraph).toEqual(['Concepts/Deep', 'Concepts'])
+
+    store.showInGraph('Concepts')
+    expect(store.get().vault.hiddenInGraph).toEqual(['Concepts/Deep'])
+  })
+
+  it('keeps an entry whose folder is not in the scan until it is removed, and Show all clears everything', async () => {
+    await ready()
+    store.toggleFolderInGraph('Gone')
+    store.toggleFolderInGraph('Daily')
+    await store.scan('full')
+    expect(store.get().vault.hiddenInGraph).toEqual(['Gone', 'Daily'])
+
+    store.clearHiddenInGraph()
+    expect(store.get().vault.hiddenInGraph).toEqual([])
+  })
+})

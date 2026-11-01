@@ -62,6 +62,11 @@ export const CSS = `
   font-size: 0.6875rem; color: var(--vc-dim); }
 .vc-legend button { display: inline-flex; align-items: center; gap: 4px; padding: 0 2px; }
 .vc-legend button[data-off="true"] { opacity: 0.4; text-decoration: line-through; }
+.vc-hidden { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.vc-hidden button[data-stale="true"] { opacity: 0.55; font-style: italic; }
+.vc-hide-wrap { margin-left: auto; pointer-events: auto; }
+.vc-crumbs .vc-hide-wrap button { color: var(--vc-accent); }
+.vc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .vc-toolbar { position: absolute; left: 8px; right: 8px; top: 6px; display: flex; align-items: center; gap: 6px; }
 .vc-toolbar input { width: 12rem; }

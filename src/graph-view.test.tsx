@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GraphView, type GraphViewProps } from './graph-view'
@@ -92,8 +93,11 @@ const props = (graph = full, over: Partial<GraphViewProps> = {}): GraphViewProps
   hiddenFolders: new Set(),
   labels: 'auto',
   legendFolders: ['A', 'B'],
+  onClearHidden: () => undefined,
+  onHidePath: () => ({ coveredBy: null }),
   onOpen: () => undefined,
   onPositions: () => undefined,
+  onShowPath: () => undefined,
   onToggleFolder: () => undefined,
   onTogglePin: () => undefined,
   openRels: new Set(),
@@ -427,7 +431,7 @@ describe('GraphView nested folder regions', () => {
     }
 
     const settleCamera = () => act(() => vi.advanceTimersByTimeAsync(1500))
-    const path = () => [...screen.getByRole('navigation').querySelectorAll('button')].map(button => button.textContent)
+    const path = () => [...screen.getByRole('navigation').querySelectorAll(':scope > button')].map(button => button.textContent)
 
     it('clicking a region label frames that folder, recursively down to the deepest one, beyond the global Fit cap', async () => {
       render(<GraphView {...nestedProps()} />)
@@ -491,6 +495,138 @@ describe('GraphView nested folder regions', () => {
       expect(root.x * k + tx).toBeCloseTo(400, 3)
       expect(root.y * k + ty).toBeCloseTo(300, 3)
       expect(k).toBeLessThanOrEqual(1.8 + 1e-9)
+    })
+
+    describe('hiding a subtree', () => {
+      const handlers = () => ({ onClearHidden: vi.fn(), onHidePath: vi.fn(() => ({ coveredBy: null })), onShowPath: vi.fn() })
+      const bar = () => within(screen.getByRole('navigation'))
+      const status = () => screen.getByRole('status').textContent
+      const dashes = (paint: Paint) => paint.filter(call => call[0] === 'setLineDash' && (call[1][0] as number[]).length > 0)
+
+      it('acts on the folder the camera is in, never the hovered one, and names it by its full path', async () => {
+        const stub = handlers()
+
+        render(<GraphView {...nestedProps(tree, stub)} />)
+        await settle()
+        click(labelPoint('A'))
+        await settleCamera()
+        click(labelPoint('B'))
+        await settleCamera()
+
+        fireEvent.pointerMove(canvas(), { ...labelPoint('C'), pointerId: 1 })
+        expect(path()).toEqual(['Vault', 'A', 'B', 'C'])
+        expect(bar().getByRole('button', { name: 'Hide A/B (11 notes)' })).toBeTruthy()
+
+        fireEvent.click(bar().getByRole('button', { name: 'Hide A/B (11 notes)' }))
+        expect(stub.onHidePath).toHaveBeenCalledExactlyOnceWith('A/B')
+        expect(status()).toBe('Hid A/B, 11 notes')
+      })
+
+      it('H does what the button does, works with no notes displayed, and ignores key repeat', async () => {
+        const stub = handlers()
+
+        render(<GraphView {...nestedProps(buildGraph([]), { ...stub, fullGraph: tree })} />)
+        await settle()
+        click(labelPoint('A'))
+        await settleCamera()
+
+        fireEvent.keyDown(canvas(), { key: 'h', repeat: true })
+        fireEvent.keyDown(canvas(), { ctrlKey: true, key: 'h' })
+        expect(stub.onHidePath).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(canvas(), { key: 'h' })
+        expect(stub.onHidePath).toHaveBeenCalledExactlyOnceWith('A')
+        expect(status()).toBe('Hid A, 19 notes')
+      })
+
+      it('offers Show for the covering ancestor when the folder is hidden only through it, and draws it dashed and labelled', async () => {
+        const stub = handlers()
+
+        render(<GraphView {...nestedProps(tree, { ...stub, hiddenFolders: new Set(['A']) })} />)
+        await settle()
+        expect(dashes(lastPaint()).length).toBeGreaterThan(0)
+        click(labelPoint('A (hidden)'))
+        await settleCamera()
+        click(labelPoint('B (hidden)'))
+        await settleCamera()
+
+        expect(path()).toEqual(['Vault', 'A', 'B'])
+        fireEvent.click(bar().getByRole('button', { name: 'Show A' }))
+        expect(stub.onShowPath).toHaveBeenCalledExactlyOnceWith('A')
+        expect(status()).toBe('Removed A')
+      })
+
+      it('removes only the framed folder own entry and says what still hides it', async () => {
+        const stub = handlers()
+
+        render(<GraphView {...nestedProps(tree, { ...stub, hiddenFolders: new Set(['A', 'A/B']) })} />)
+        await settle()
+        click(labelPoint('A (hidden)'))
+        await settleCamera()
+        click(labelPoint('B (hidden)'))
+        await settleCamera()
+
+        fireEvent.click(bar().getByRole('button', { name: 'Show A/B' }))
+        expect(stub.onShowPath).toHaveBeenCalledExactlyOnceWith('A/B')
+        expect(status()).toBe('Removed A/B; still hidden by A')
+      })
+
+      it('draws no dashes, and leaves no dash set, when nothing is hidden', async () => {
+        render(<GraphView {...nestedProps()} />)
+        await settle()
+        expect(dashes(lastPaint())).toHaveLength(0)
+      })
+
+      it('lists every saved entry the legend does not show, in any mode, with subtree counts and stale ones marked', async () => {
+        const stub = handlers()
+
+        render(<GraphView {...props(tree, { ...stub, hiddenFolders: new Set(['A/B', 'Gone', 'D']), legendFolders: ['', 'A', 'D'] })} />)
+        await settle()
+
+        const group = within(screen.getByRole('group', { name: 'Hidden' }))
+
+        expect(group.getByRole('button', { name: 'Show A/B' }).textContent).toBe('A/B · 11')
+        expect(group.getByRole('button', { name: 'Show Gone' }).textContent).toBe('Gone (not in current scan)')
+        expect(group.queryByRole('button', { name: 'Show D' })).toBeNull()
+
+        fireEvent.click(group.getByRole('button', { name: 'Show Gone' }))
+        expect(stub.onShowPath).toHaveBeenCalledWith('Gone')
+        fireEvent.click(group.getByRole('button', { name: 'Show all' }))
+        expect(stub.onClearHidden).toHaveBeenCalled()
+      })
+
+      it('lists a stale root-notes entry', async () => {
+        const folderOnly = buildGraph([...ring('A', 8)])
+
+        render(<GraphView {...props(folderOnly, { hiddenFolders: new Set(['']), legendFolders: ['A'] })} />)
+        await settle()
+        expect(screen.getByRole('button', { name: 'Show Root notes' }).textContent).toBe('Root notes (not in current scan)')
+      })
+
+      it('moves focus to the control that takes the removed chip place, then to the graph', async () => {
+        const Harness = () => {
+          const [entries, setEntries] = useState(['A/B', 'Gone'])
+
+          return (
+            <GraphView
+              {...props(tree, {
+                hiddenFolders: new Set(entries),
+                legendFolders: ['', 'A', 'D'],
+                onShowPath: path => setEntries(list => list.filter(entry => entry !== path))
+              })}
+            />
+          )
+        }
+
+        render(<Harness />)
+        await settle()
+        fireEvent.click(screen.getByRole('button', { name: 'Show A/B' }))
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Gone' }))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show Gone' }))
+        expect(screen.queryByRole('group', { name: 'Hidden' })).toBeNull()
+        expect(document.activeElement).toBe(canvas())
+      })
     })
 
     it('stays framed on the same folder when the viewport is resized', async () => {

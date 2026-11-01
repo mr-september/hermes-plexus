@@ -6,6 +6,7 @@
  */
 
 import type { VaultFs } from './files'
+import { hidePath, showPath } from './hidden'
 import {
   backlinksOf,
   buildGraph,
@@ -828,12 +829,33 @@ export class VaultStore {
     this.updateVault({ pinned: pinned.includes(rel) ? pinned.filter(item => item !== rel) : [...pinned, rel] })
   }
 
+  /** Legend chips: hide the folder, or remove exactly its entry if it is already one. */
   toggleFolderInGraph(folder: string): void {
-    const { hiddenInGraph } = this.state.vault
+    if (this.state.vault.hiddenInGraph.includes(folder)) {
+      this.showInGraph(folder)
+    } else {
+      this.hideInGraph(folder)
+    }
+  }
 
-    this.updateVault({
-      hiddenInGraph: hiddenInGraph.includes(folder) ? hiddenInGraph.filter(item => item !== folder) : [...hiddenInGraph, folder]
-    })
+  /** Hide a folder's subtree. A path an existing entry already covers adds nothing; says what covers it. */
+  hideInGraph(path: string): { coveredBy: null | string } {
+    const { coveredBy, entries } = hidePath(this.state.vault.hiddenInGraph, path)
+
+    if (coveredBy === null) {
+      this.updateVault({ hiddenInGraph: entries })
+    }
+
+    return { coveredBy }
+  }
+
+  /** Remove exactly one entry; other entries, ancestors and descendants included, keep hiding what they hide. */
+  showInGraph(path: string): void {
+    this.updateVault({ hiddenInGraph: showPath(this.state.vault.hiddenInGraph, path) })
+  }
+
+  clearHiddenInGraph(): void {
+    this.updateVault({ hiddenInGraph: [] })
   }
 
   /**

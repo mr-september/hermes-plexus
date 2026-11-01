@@ -19,7 +19,7 @@ document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'ligh
 installStyles()
 
 // The `nested` scene swaps the demo vault for a generated multi-level one (see demo/synthetic.ts), tuned from the URL hash.
-const nestedScene = scene === 'nested'
+const nestedScene = scene === 'nested' || scene === 'hidden'
 const num = (key: string, fallback: number) => Number(params.get(key) ?? fallback)
 
 const TOP = ['Projects', 'Research', 'Concepts', 'People', 'Daily', 'Reading']
@@ -79,7 +79,8 @@ const open: Record<string, string[]> = {
 prefs.saveVault(ROOT, {
   active: open[scene]?.at(-1) ?? null,
   expanded: ['Projects', 'Research', 'Concepts'],
-  hiddenInGraph: [],
+  // The `hidden` scene shows two hidden subtrees and a saved entry whose folder is not in the scan.
+  hiddenInGraph: scene === 'hidden' ? ['Projects/Models', 'Research/Notes', 'Archive/2019'] : [],
   nestedPositions: {},
   pinned: [],
   positions: {},

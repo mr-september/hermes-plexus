@@ -5,6 +5,7 @@ import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
 import { NO_ACCESS, type VaultFs } from './files'
 import { FileTree } from './file-tree'
 import { GraphView } from './graph-view'
+import { HiddenControls } from './hidden-controls'
 import { PLUGIN_ID } from './i18n'
 import { assetResolver, backlinksOf, clampSplit, filterGraph, linkResolver, noteTitle } from './model'
 import { NotePane } from './note-pane'
@@ -221,7 +222,16 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                 </button>
               </div>
             ) : !state.status.loading && notes.length === 0 ? (
-              <div className="vc-empty">{t('empty.noNotes')}</div>
+              <div className="vc-empty">
+                <div>{t('empty.noNotes')}</div>
+                <HiddenControls
+                  entries={vault.hiddenInGraph}
+                  legendFolders={legendFolders}
+                  nodes={graph.nodes}
+                  onClear={() => store.clearHiddenInGraph()}
+                  onShow={path => store.showInGraph(path)}
+                />
+              </div>
             ) : (
               <GraphView
                 cluster={prefs.cluster}
@@ -230,7 +240,10 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                 hiddenFolders={hiddenInGraph}
                 labels={prefs.labels}
                 legendFolders={legendFolders}
+                onClearHidden={() => store.clearHiddenInGraph()}
+                onHidePath={path => store.hideInGraph(path)}
                 onOpen={openRel}
+                onShowPath={path => store.showInGraph(path)}
                 nestedPositions={vault.nestedPositions}
                 onNestedPositions={positions => store.setNestedPositions(positions)}
                 onPositions={(mode, positions) => store.setPositions(mode, positions)}
