@@ -9,7 +9,7 @@ import { HiddenControls } from './hidden-controls'
 import { PLUGIN_ID } from './i18n'
 import { assetResolver, backlinksOf, clampSplit, filterGraph, linkResolver, noteTitle } from './model'
 import { NotePane } from './note-pane'
-import type { PrefsStore } from './prefs'
+import type { ClusterMode, LabelMode, PrefsStore } from './prefs'
 import type { PreviewContext } from './preview'
 import type { VaultStore } from './store'
 import { chooseVaultFolder } from './vault-fs'
@@ -24,6 +24,15 @@ export interface WorkspaceProps {
   prefs: PrefsStore
   store: VaultStore
 }
+
+const LAYOUTS: { label: string; mode: ClusterMode; title: string }[] = [
+  { label: 'graph.layoutFree', mode: 'none', title: 'graph.clusterNone' },
+  { label: 'graph.layoutFolders', mode: 'folder', title: 'graph.clusterFolder' },
+  { label: 'graph.layoutNested', mode: 'nested', title: 'graph.clusterNested' }
+]
+
+const LABEL_NEXT: Record<LabelMode, LabelMode> = { always: 'never', auto: 'always', never: 'auto' }
+const LABEL_NAMES: Record<LabelMode, string> = { always: 'settings.labelsAlways', auto: 'settings.labelsAuto', never: 'settings.labelsNever' }
 
 export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps) {
   const t = usePluginI18n(PLUGIN_ID)
@@ -340,6 +349,30 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                   type="button"
                 >
                   <Codicon name="circle-small" size="0.95rem" />
+                </button>
+                <div aria-label={t('graph.layout')} className="vc-seg" role="radiogroup">
+                  {LAYOUTS.map(({ mode, label, title }) => (
+                    <button
+                      aria-checked={prefs.cluster === mode}
+                      key={mode}
+                      onClick={() => prefsStore.set({ cluster: mode })}
+                      role="radio"
+                      title={t(title)}
+                      type="button"
+                    >
+                      {t(label)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  aria-label={t('graph.labelsNow', t(LABEL_NAMES[prefs.labels]))}
+                  className="vc-toggle"
+                  data-on={prefs.labels !== 'never'}
+                  onClick={() => prefsStore.set({ labels: LABEL_NEXT[prefs.labels] })}
+                  title={t('graph.labelsNow', t(LABEL_NAMES[prefs.labels]))}
+                  type="button"
+                >
+                  Aa
                 </button>
                 {state.status.loading && <span className="vc-dim">…</span>}
               </div>

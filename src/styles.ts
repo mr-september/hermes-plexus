@@ -69,8 +69,11 @@ export const CSS = `
 .vc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .vc-toolbar { position: absolute; left: 8px; right: 8px; top: 6px; display: flex; align-items: center; gap: 6px; }
-.vc-toolbar input { width: 12rem; }
+.vc-toolbar input { flex: 0 1 12rem; width: 12rem; min-width: 0; }
 .vc-toggle { padding: 1px 6px; color: var(--vc-dim); }
+.vc-seg { display: inline-flex; border: 1px solid var(--vc-line); border-radius: 4px; overflow: hidden; font-size: 0.6875rem; }
+.vc-seg button { padding: 1px 8px; border-radius: 0; color: var(--vc-dim); }
+.vc-seg button[aria-checked="true"] { color: var(--vc-accent); background: var(--vc-hover); }
 .vc-toggle[data-on="true"] { color: var(--vc-accent); }
 .vc-crumbs { position: absolute; left: 8px; bottom: 26px; right: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px;
   font-size: 0.6875rem; color: var(--vc-dim); pointer-events: none; }

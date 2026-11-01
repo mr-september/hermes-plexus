@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FakeDisk } from '../test/fake-disk'
@@ -155,6 +155,30 @@ describe('VaultWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'C:\\Other' }))
     expect(screen.queryByRole('button', { name: 'C:\\v' })).toBeNull()
     expect(prefs.get().vaultRoot).toBe('C:\\Other')
+  })
+
+  it('switches the graph layout and cycles the labels from the graph toolbar, without opening settings', async () => {
+    mount()
+    await screen.findByText('Alpha')
+
+    const layout = screen.getByRole('radiogroup', { name: 'Graph layout' })
+
+    expect(within(layout).getByRole('radio', { name: 'Folders' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Nested' }))
+    expect(prefs.get().cluster).toBe('nested')
+    expect(within(layout).getByRole('radio', { name: 'Nested' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(layout).getByRole('radio', { name: 'Free' }))
+    expect(prefs.get().cluster).toBe('none')
+
+    const labels = () => screen.getByRole('button', { name: /^Note labels:/ })
+
+    expect(labels().getAttribute('aria-label')).toContain('When zoomed in')
+    fireEvent.click(labels())
+    expect(prefs.get().labels).toBe('always')
+    fireEvent.click(labels())
+    expect(prefs.get().labels).toBe('never')
+    fireEvent.click(labels())
+    expect(prefs.get().labels).toBe('auto')
   })
 
   it('collapses the note pane to nothing and back via the keyboard-operable divider', async () => {

@@ -32,6 +32,11 @@ export const en = {
     hiddenGroup: 'Hidden',
     hiddenSuffix: '(hidden)',
     hideFolder: (path: string, notes: number) => `Hide ${path} (${notes} notes)`,
+    labelsNow: (mode: string) => `Note labels: ${mode}. Click to change.`,
+    layout: 'Graph layout',
+    layoutFolders: 'Folders',
+    layoutFree: 'Free',
+    layoutNested: 'Nested',
     local: 'Local graph (this note and its neighbours)',
     nestedHelp:
       "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out. Use Hide or Show in the path bar, or press H on the graph, to toggle the current folder's subtree.",

@@ -549,6 +549,11 @@ var en = {
     hiddenGroup: "Hidden",
     hiddenSuffix: "(hidden)",
     hideFolder: (path, notes) => `Hide ${path} (${notes} notes)`,
+    labelsNow: (mode) => `Note labels: ${mode}. Click to change.`,
+    layout: "Graph layout",
+    layoutFolders: "Folders",
+    layoutFree: "Free",
+    layoutNested: "Nested",
     local: "Local graph (this note and its neighbours)",
     nestedHelp: "Folders are nested regions and notes stay inside their own folder's region, so a note cannot be dragged out of it. Click a region's label to zoom to that folder; click a step of the path or press Escape to go back out. Use Hide or Show in the path bar, or press H on the graph, to toggle the current folder's subtree.",
     notInScan: "not in current scan",
@@ -1620,8 +1625,11 @@ var CSS = `
 .vc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .vc-toolbar { position: absolute; left: 8px; right: 8px; top: 6px; display: flex; align-items: center; gap: 6px; }
-.vc-toolbar input { width: 12rem; }
+.vc-toolbar input { flex: 0 1 12rem; width: 12rem; min-width: 0; }
 .vc-toggle { padding: 1px 6px; color: var(--vc-dim); }
+.vc-seg { display: inline-flex; border: 1px solid var(--vc-line); border-radius: 4px; overflow: hidden; font-size: 0.6875rem; }
+.vc-seg button { padding: 1px 8px; border-radius: 0; color: var(--vc-dim); }
+.vc-seg button[aria-checked="true"] { color: var(--vc-accent); background: var(--vc-hover); }
 .vc-toggle[data-on="true"] { color: var(--vc-accent); }
 .vc-crumbs { position: absolute; left: 8px; bottom: 26px; right: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px;
   font-size: 0.6875rem; color: var(--vc-dim); pointer-events: none; }
@@ -23230,6 +23238,13 @@ function NotePane(props) {
 import { Fragment as Fragment3, jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 var FULL_RESCAN_LIMIT = 1500;
 var STEP = 0.05;
+var LAYOUTS = [
+  { label: "graph.layoutFree", mode: "none", title: "graph.clusterNone" },
+  { label: "graph.layoutFolders", mode: "folder", title: "graph.clusterFolder" },
+  { label: "graph.layoutNested", mode: "nested", title: "graph.clusterNested" }
+];
+var LABEL_NEXT = { always: "never", auto: "always", never: "auto" };
+var LABEL_NAMES = { always: "settings.labelsAlways", auto: "settings.labelsAuto", never: "settings.labelsNever" };
 function VaultWorkspace({ fs, prefs: prefsStore, store }) {
   const t2 = usePluginI18n7(PLUGIN_ID);
   const state = useSyncExternalStore2(store.subscribe, store.get);
@@ -23487,6 +23502,30 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                     title: t2("graph.orphans"),
                     type: "button",
                     children: /* @__PURE__ */ jsx8(Codicon4, { name: "circle-small", size: "0.95rem" })
+                  }
+                ),
+                /* @__PURE__ */ jsx8("div", { "aria-label": t2("graph.layout"), className: "vc-seg", role: "radiogroup", children: LAYOUTS.map(({ mode, label, title }) => /* @__PURE__ */ jsx8(
+                  "button",
+                  {
+                    "aria-checked": prefs.cluster === mode,
+                    onClick: () => prefsStore.set({ cluster: mode }),
+                    role: "radio",
+                    title: t2(title),
+                    type: "button",
+                    children: t2(label)
+                  },
+                  mode
+                )) }),
+                /* @__PURE__ */ jsx8(
+                  "button",
+                  {
+                    "aria-label": t2("graph.labelsNow", t2(LABEL_NAMES[prefs.labels])),
+                    className: "vc-toggle",
+                    "data-on": prefs.labels !== "never",
+                    onClick: () => prefsStore.set({ labels: LABEL_NEXT[prefs.labels] }),
+                    title: t2("graph.labelsNow", t2(LABEL_NAMES[prefs.labels])),
+                    type: "button",
+                    children: "Aa"
                   }
                 ),
                 state.status.loading && /* @__PURE__ */ jsx8("span", { className: "vc-dim", children: "\u2026" })
