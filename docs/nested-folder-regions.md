@@ -1,6 +1,6 @@
-# Nested folder regions: proposal
+# Nested folder regions
 
-Status: M0–M3 implemented behind the opt-in `nested` cluster mode (`src/regions.ts`, `src/layout.ts`, `src/camera.ts`, `src/graph-view.tsx`). The sections below are the design; the **Implementation record** at the end states what the implementation resolved and what was measured. Cost statements in the design sections are reasoning; the measurements are in the record.
+Status: implemented behind the opt-in `nested` cluster mode: nested region geometry, whole-note containment, recursive framing and persistence (M0–M3), a reserved label band per region, an undrawn vault-root disc, and subtree hiding (S1–S3). Source: `src/regions.ts`, `src/layout.ts`, `src/camera.ts`, `src/hidden.ts`, `src/hidden-controls.tsx`, `src/graph-view.tsx`. The sections up to "Left to the prototype" are the original design, with decisions marked in place; "Subtree hiding" is a second specification; the **Implementation record** at the end states what the implementation resolved and what was measured. Cost statements in the design sections are reasoning; the measurements are in the record. Not yet judged: the feel on a real nested vault (see "Left to the prototype").
 
 ## Problem
 
@@ -12,7 +12,9 @@ The graph reflects only the first path segment of a note (`noteFolder` in `src/m
 - Moving files by dragging nodes between regions.
 - Changing the file tree.
 
-## Relevant current behaviour
+## Behaviour before this work
+
+The code as it was when this design was written; the nested mode changes none of it for the `folder` and `none` modes.
 
 - `paint` redraws everything on canvas 2D on every simulation tick, hover change, pan and zoom, with a label pass that scans placed labels linearly. `hit` is a linear scan over nodes.
 - Simulation and paint share the main thread. d3-force dispatches `tick` after a step has applied the forces and integrated, and the plugin's handler only schedules a paint, so timing that handler does not measure force computation.
@@ -131,7 +133,7 @@ Degradation, if measurement shows a cliff: draw regions only on settle while the
 - **M1, model and geometry.** `dir`, canonical tree, footprint buckets, deterministic bottom-up packing. Tests: on randomly generated folder trees, siblings are disjoint, children lie inside parents, repeated computation yields identical geometry, chains abbreviate while every folder resolves.
 - **M2, interactive prototype.** Static regions drawn, functional region labels and hit-testing, per-tick projection, drag clamping and compartment-relative pins, hover ancestry, click-to-frame, shared geometry-derived zoom limits and path/Escape to go outward. Include enough semantic zoom to reveal children during recursive navigation; navigation across depths must be usable in M2, not deferred to M3. Judge the feel on a real nested vault before more is built. Invariant tests check containment before the first paint after seeding or remapping and after every step, including mid-drag, after a pin, after a shrinking repack or note-radius growth, after a rebuild and after mode switching, not only after settling. Check framing both the whole map and deep folders, including after viewport changes.
 - **M3, rendering polish, persistence and settings.** Refined visibility bands and traversal culling, label-placement polish, `'nested'` mode, mode-validated, compartment-relative positions (both live and persisted), README and screenshots, then re-measure against M0 and set cutoffs.
-- **Deferred.** Link-aware arrangement of sibling regions (needs a folder-level simulation whose cost and constraint satisfaction are not yet established); subtree hiding with a reversible control; local-graph repacking; a grid-hash label pass; a spatial index for hit-testing; a worker for the simulation.
+- **Deferred.** Link-aware arrangement of sibling regions (needs a folder-level simulation whose cost and constraint satisfaction are not yet established); local-graph repacking; a grid-hash label pass; a spatial index for hit-testing; a worker for the simulation. Subtree hiding was deferred here and has since been implemented (see "Subtree hiding"). The measurements in the Implementation record found no cost knee up to the sizes tried (N up to 5000, headless Edge and Node, not the Hermes webview), so none of the deferred performance items is pursued without a measured problem on a real vault.
 
 ## Decisions
 
@@ -195,11 +197,11 @@ A region covered by an explicit entry or a covering ancestor is drawn with a das
 - **S2, controls.** Path-bar button, `H`, recovery controls in `graph-view.tsx` and the empty-scan branch of `workspace.tsx`, and the dashed hidden-region look; view tests, including empty-state recovery.
 - **S3, documentation.** README and a screenshot of a hidden subtree with the Hidden group.
 
-### Open questions
+### Decided and deferred
 
-1. Whether to add a transient undo affordance in addition to the always-visible chip. The chip is sufficient for reversibility; an undo toast adds a second control for the same state.
-2. A "solo" action (show only this folder's subtree) is the natural complement and is a different state (a single shown path rather than a hidden set); not specified here.
-3. Whether the Hide and Show button should also appear on the canvas next to the framed region's label. Start in the path bar, which is accessible and keeps the canvas free of hit-test conflicts; move it only if the prototype shows it is hard to find.
+1. No undo toast. The Hidden group chip (or the legend chip) is the single control for reversing a hide; a toast would be a second control for the same state. Decided.
+2. A "solo" action (show only this folder's subtree) is not built. It is a different state, a single shown path rather than a hidden set, and would need its own persistence and recovery control. Deferred; specify before building.
+3. The Hide and Show button lives in the path bar only. It is accessible and keeps the canvas free of hit-test conflicts. Open until used on a real vault: move it next to the framed region's label only if it proves hard to find.
 
 ## Implementation record
 
