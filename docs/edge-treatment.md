@@ -1,79 +1,99 @@
 # Edge treatment in the nested graph
 
-Status: proposal, nothing implemented. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture.
+Status: proposal, nothing implemented. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture. Revised after review; the first increment is E1 plus conservative viewport culling plus an edge show/hide toggle, in nested mode only. E2 and E3 are deferred, and batching is evaluated as a deliberate visual change.
 
 ## Context and motivation
 
-Today every edge is one straight line, 1 screen pixel wide, alpha 0.35, one muted colour, painted over the region discs and under the notes (`draw` in `src/graph-view.tsx`; on hover the focused note's edges go to alpha 0.9 in the accent colour and the rest to 0.08). That treatment was designed for the flat layouts, where distance already encodes locality. In nested mode it has three problems, all visible in the live screenshot:
+Today every edge is one straight line, 1 screen pixel wide, painted over the region discs and under the notes (`draw` in `src/graph-view.tsx`). Each edge is stroked separately with `globalAlpha` 0.35 multiplied by the theme token `--ui-stroke-secondary` (fallback `#8885`), which may itself carry alpha; on hover the focused note's edges go to alpha 0.9 in the accent colour and the rest to 0.08. That treatment was designed for the flat layouts, where distance already encodes locality. In nested mode it has three problems, all visible in the live screenshot:
 
-1. **Cross-region edges form a haze over the map.** In nested mode a note's edge to another top-level folder crosses at least two region boundaries and the empty space between discs. These edges are the long ones, they are the majority in a densely cross-linked vault, and they paint over the discs that are supposed to carry the structure. Intra-folder edges, which are what explain a compartment's internal arrangement, are short and drowned out by them.
+1. **Cross-region edges form a haze over the map.** In nested mode a note's edge to another top-level folder crosses region boundaries and the empty space between discs. These edges are the long ones, they are the majority in a densely cross-linked vault, and they paint over the discs that are supposed to carry the structure. Intra-folder edges, which explain a compartment's internal arrangement, are short and drowned out by them.
 2. **The layout no longer needs cross-folder edges to be strong.** Cross-folder link strength was cut to 0.03 so they stop dragging notes to the rim. Those edges are now almost purely visual: they say "A and B are related" without influencing position. A purely visual channel can be encoded more compactly than one line per link.
-3. **Cost is per edge, per frame.** The paint loop does `beginPath`/`stroke` for every edge on every tick and every pan/zoom frame. Cost is unmeasured in the Hermes webview; the earlier paint bench (headless Edge) is the place to measure it before and after.
+3. **Cost is per edge, per frame.** The paint loop does `beginPath`/`stroke` for every edge on every tick and every pan/zoom frame. Cost is unmeasured in the Hermes webview; the paint bench (headless Edge) is the place to measure it, but its defaults (two links per note, 10% cross-folder) are far sparser than the motivating vault, so a dense case must be added before drawing cost conclusions.
 
 ## Edge classes
 
-The folder tree gives a natural classification with no new data: the lowest common ancestor (LCA) of the two notes' folders.
+Three exhaustive classes, evaluated in order, from the two notes' `dir` and `folder` alone (no tree walk):
 
-| class | LCA | meaning |
-|---|---|---|
-| intra-compartment | the notes' own folder | same folder; the local texture of a compartment |
-| intra-top | a folder below the root, above both notes' folders | same top-level folder, different subfolders |
-| inter-top | the vault root | crosses top-level containers |
+| condition, in order | class |
+|---|---|
+| same `dir` (including `''`) | same compartment |
+| different `dir`, same non-empty `folder` | within top-level folder |
+| otherwise (different top-level folders, and root note ↔ folder) | across top-level structure |
 
-Depth of the LCA is a finer scalar (`span`, the number of region boundaries the straight line crosses is a related quantity) and is what the proposals below actually key on; the three classes are its coarse reading. Computing it is O(depth) per edge, once per graph change, from `geometry.byDir` and the region parent chain.
+Note that `A` ↔ `A/B` is "within top-level folder" (same `folder` `A`), and a link between a root note and any folder note is "across", even though it does not cross two top-level containers.
 
-## Proposals
+The lowest common ancestor of the two folders is not needed for these classes. It stays available as metadata for later zoom or aggregation work, with three distinctions to keep straight if it is used: logical depth, displayed depth after chain collapse, and tree-path length. None of them equals the number of region boundaries a straight segment actually crosses, since a line can pass through unrelated discs.
 
-They are ordered by dependency and by cost; each can be adopted without the next.
+## First increment
 
-### E0. Batch strokes and cull to the viewport (no visual change)
+### E1. Tier the style by class (nested mode only)
 
-Group edges by style class and issue one path and one `stroke` per class instead of one per edge; skip an edge whose bounding box misses the viewport. Zoomed in, most edges are off screen, so the cull is the larger saving there; batching helps at every zoom. This changes nothing a user sees, only cost, and every later proposal assumes it (a handful of classes is cheap to batch; per-edge styles are not). Measure with the paint bench before deciding the rest is needed for performance reasons, as opposed to legibility reasons.
+- **Same compartment:** tinted with the folder's top-level hue, so the edge reads as part of the region.
+- **Within top-level folder:** the same hue, lighter.
+- **Across top-level structure:** the faintest, neutral. Endpoint-source hue is rejected: in an arrowless display it would arbitrarily privilege one endpoint. A neutral colour also lets the class be drawn as one path.
 
-### E1. Tier the style by class
+"Keep the current weight" is not a number to copy. Today's appearance is `globalAlpha` times a theme colour that may carry its own alpha; replacing it with an opaque HSL at 0.35 could make local edges substantially stronger. Calibrate the tinted classes against the existing composite in both themes, comparing the same settled scene before and after, not the alpha constants.
 
-Intra-compartment edges keep the current weight, tinted with the folder's hue so they read as part of the region. Intra-top edges are lighter, same hue. Inter-top edges are the faintest, neutral (or a two-stop gradient between the endpoint hues, which costs a gradient object per edge and so conflicts with E0; a neutral colour batches). Hover and selection override the tier: a focused note's edges are fully drawn regardless of class, so the haze is a resting state, not a loss of information.
+The tiers apply in nested mode only. Whether to port them to the non-nested layouts is a later decision.
 
-Rationale: it applies the visual hierarchy the regions already establish. The reader should see structure first (discs), local relations second (intra edges), global relations third (cross edges).
+The rationale is to apply the visual hierarchy the regions already establish: structure first (discs), local relations second, global relations third.
 
-Open: whether inter-top edges should be neutral or hued. Neutral is cheaper and quieter; hued by the source's top-level folder makes direction-free edges look directional.
+### Interaction precedence
 
-### E2. Gate edges by zoom, using the same bands as regions and labels
+1. Edges Off suppresses all edges, including a focused note's.
+2. Otherwise a focused note's incident edges override the tier and any fade, and are painted last, on top. The focus order is unchanged: hover, then keyboard cursor, then the selected note.
+3. Local-graph mode bypasses the tiers (every edge at full strength). The reason is that the user asked for exactly those relationships, not that a neighbourhood is necessarily small.
 
-The map already has semantic zoom bands for regions (`REGION_MIN_PX`) and labels (`LABEL_MIN_PX`). Edges can follow the same rule keyed on the LCA region's on-screen radius `s`:
+Hidden-folder filtering is unchanged: the model has no note-to-region edges, so a hidden folder's notes and their edges are simply absent.
 
-- an edge of LCA region R is drawn at full tier strength only while R's on-screen radius is below the viewport-covering scale and above a minimum (below it, the region is a dot and its internal edges are sub-pixel);
-- once R has outgrown the viewport (the existing `covers` condition) its internal edges stay, and edges of enclosing LCAs are faded further, because their far endpoints are off screen anyway;
-- inter-top edges fade out as the camera enters a single top-level region, and return when it backs out.
+### Reciprocal links
 
-The effect is that the edges drawn at any zoom are those that connect things visible at that zoom, which is the same promise the labels make. This needs per-edge LCA depth (above) and nothing else; it is a change of alpha, not of geometry.
+`buildGraph` keeps A→B and B→A as separate edges (its key is directional), so today they are two coincident strokes, which accumulate to about 0.58 where one edge is 0.35. Mutual links therefore look stronger by accident, not by design. Proposal:
 
-### E3. Bundle inter-top edges
+- **At rest, draw one undirected line per linked pair.** Deduplicate for drawing (the model and link counts are untouched). Direction is not encoded in the overview: the graph has no arrowheads today, arrowheads at this density are clutter, and the dominant question in the overview is "are these related", not "who links to whom". A mutual link no longer looks stronger; that loses nothing the reader was meant to see.
+- **On focus, distinguish three kinds of incident edge**, since only the focused note's few edges are drawn emphatically: outgoing (accent), incoming (a second tint, such as a dimmer accent), and mutual (both tints, or the accent with a thicker line). This is cheap (incident edges only), is where direction is actually useful ("what does this note cite, what cites it"), and agrees with the backlinks the note pane already shows.
+- Deferred, since it needs a colour decision and a legend: the focus-time distinction can be skipped in the first increment, leaving the dedupe alone.
 
-For graphs where E1 and E2 still leave a hairball, replace individual inter-top edges at low zoom by one aggregate per pair of sibling regions at the LCA: a ribbon between the two child regions, width growing with the log of the edge count, expanding into the individual edges when the camera zooms into either endpoint region or the user hovers a note. At most min(E, R²) ribbons for R sibling regions at that level, usually far fewer than E.
+### Viewport culling
 
-Two forms, in increasing cost:
+Skip an edge whose segment cannot touch the viewport, tested on the segment's bounding box grown by a stroke-width margin. Endpoint tests alone are not enough: a segment with both endpoints outside the viewport may still cross it, and must still be drawn. Culling is independent of the style work and of batching. Zoomed in, most edges are off screen, so this is the larger saving there.
 
-- **Ribbons between region discs**: straight or gently curved bands between disc boundaries. Static geometry (regions do not move), so the ribbon set changes only when the graph does. Cheap to draw; loses which notes are linked until expanded.
-- **Hierarchical edge bundling** (Holten, IEEE TVCG 2006; DOI recalled, unverified): route each edge as a B-spline through the centres of the regions on the tree path between its endpoints, with a tension parameter. Keeps per-edge identity, exposes the hierarchy, and reuses the region geometry as control points. Cost is O(depth) control points per edge per frame, and endpoints move while notes settle, so curves are rebuilt on tick. It also does not compose with E0's one-path-per-class batching unless curves are flattened into polylines first.
+### Edge show/hide control
 
-I would start with ribbons. The nested map already has the hierarchy as geometry, so the bundling control points are free, but the per-frame cost and the loss of straight-line readability for the bundled curves are the sort of thing to measure on the real vault first, not to assume.
+A two-state control in the graph toolbar next to the layout and labels toggles: edges shown or hidden. Hiding is useful for very large vaults and for reading the structure alone. A third state (`Auto`, zoom-dependent) is added only when zoom-dependent behaviour exists; shipping three states now would leave two of them identical.
 
-### E4. A user-visible control
+### Batching: a visual decision, not a free optimisation
 
-A three-state `Edges` control in the toolbar beside the layout and labels toggles, in the same spirit: `All` (every edge at its tier), `Tiered` (the default: E1 and E2), `Off`. `Off` matters for very large vaults and for reading structure alone. Per-class toggles are not proposed; the tiers are meant to make them unnecessary.
+Stroking many separate translucent paths accumulates opacity where they cross or coincide; subpaths within one stroked path are painted as a union (HTML canvas specification, `stroke()`). Batching edges into one path per style class therefore removes the accumulation. That may well be what clears the haze (a dense crossing no longer darkens toward opaque), but it is a rendering change that also flattens the cue that many edges pass through the same place. Evaluate it as one: render the same settled scene both ways in both themes and judge the images. A canvas-call assertion cannot validate that, only that one stroke per class was issued. It also reduces per-frame cost, which is measured separately on a dense case.
 
-## Recommendation
+## Deferred
 
-Do E0 and E1 together: E0 is invisible and E1 is the largest legibility change per line of code. Then E2, which is cheap once the LCA depth exists. Hold E3 until the result of E0–E2 on the live vault is seen; if the inter-top layer still obscures the discs, use ribbons first. E4 can ship with E1 since it is a pref and a toolbar button.
+### E2. Zoom-dependent edge visibility
+
+Not specified enough to build. A visibility rule needs more than an edge's LCA: it needs the region geometry, the zoom, and the viewport position and size (the `covers` test depends on all of them). Folder scale is also not endpoint visibility: a folder can hold a small direct-note compartment next to large descendant regions, so its radius says little about whether its direct-note edges are readable, and panning at fixed zoom can change the relevant context entirely. If E1 does not suffice, define E2 by explicit cases (overview, a framed folder, a deep compartment, a viewport straddling siblings), with continuous fades and the focused note's external connections preserved. Reusing the label thresholds is a possible starting point, not a demonstrated correspondence.
+
+### E3. Bundling across top-level structure
+
+For graphs where E1 still leaves a hairball, the options are:
+
+- **Ribbons between sibling regions**, width growing with the log of the edge count, expanded on hover or when the camera enters an endpoint region. They need more semantic design than a first look suggests: a root's direct-note compartment is not a child folder region; counts must respect filtering; reciprocal edges need a counting convention; hover expansion must not double-represent; and a straight ribbon can still cross unrelated discs. They deserve a separate prototype if tiering proves insufficient.
+- **Hierarchical edge bundling** (Holten, IEEE TVCG 2006; DOI recalled, unverified): route each edge as a spline through the centres of the regions on its tree path. It keeps per-edge identity and reuses the region geometry as control points. Cost is O(depth) control points per edge per frame, with endpoints moving while notes settle. Curves can share a canvas path as Bézier subpaths, so batching by style class does not require flattening to polylines; construction and rasterisation still cost work.
 
 ## Tests and acceptance
 
-Few and sharp, per project convention: (1) LCA classification on a small tree, including notes at the root and chained single-child folders (the same chain-collapse the regions use); (2) batching issues one stroke per class (assert on the recorded canvas calls) and the cull drops an off-screen edge; (3) hover restores full strength for the focused note's edges whatever their class. No performance or coverage thresholds are proposed; judge paint cost by the bench numbers before and after.
+Few and sharp, per project convention:
+
+1. **Classification is exhaustive and ordered:** same `dir` including root, `A` ↔ `A/B`, siblings under a top-level folder, root note ↔ folder, and two top-level folders.
+2. **Culling keeps crossing segments:** a segment with both endpoints outside the viewport that crosses it is drawn; one that misses it is not, including a stroke-width margin case.
+3. **Precedence:** Off draws nothing; otherwise a focused note's edges beat the tier and are painted last, in hover, cursor, selected order; local-graph mode draws every edge at full strength.
+4. **Reciprocal dedupe:** a mutual pair is drawn once at rest and the model's edge count is unchanged.
+5. **A browser-rendered comparison** of a small overlapping-edges scene, with and without batching, in both themes, because only an image shows the accumulation difference.
+
+No performance or coverage thresholds are proposed. Judge paint cost by bench numbers before and after, on a dense case.
 
 ## Open questions
 
-1. Inter-top edge colour: neutral or hued.
-2. Whether an edge between a note and a hidden-folder region should be drawn at all (currently hidden notes and their edges are filtered out; unchanged unless decided otherwise).
-3. Whether a note-to-note edge inside the same compartment ever needs bundling (no: it is short by construction).
-4. Whether local-graph mode, which restricts to a neighbourhood, should bypass the tiers (likely yes: few edges, all relevant).
+1. Focus-time direction colours (outgoing, incoming, mutual): ship with the first increment or defer.
+2. Whether the dedupe should also apply to the model's link counts shown elsewhere (no: counts stay as they are).
+3. Whether batching is adopted, once the before and after images have been compared.
+4. The scope and timing of porting the tiers to the non-nested layouts.
