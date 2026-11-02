@@ -88,6 +88,19 @@ describe('scanning', () => {
     expect(store.get().notes.some(n => n.rel === 'Fresh.md')).toBe(true)
     expect(reads.mock.calls.map(c => c[0])).toEqual([disk.abs('Fresh.md')])
   })
+
+  it('keeps the same graph object across a rescan that changed nothing, so the layout is not restarted', async () => {
+    await ready()
+
+    const before = store.get().graph
+
+    await store.scan('full')
+    expect(store.get().graph).toBe(before)
+
+    disk.files.set(disk.abs('Fresh.md'), 'new [[Alpha]]')
+    await store.scan('full')
+    expect(store.get().graph).not.toBe(before)
+  })
 })
 
 describe('editing', () => {

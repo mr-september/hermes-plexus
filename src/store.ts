@@ -20,6 +20,7 @@ import {
   parseLinkTarget,
   retargetLinks,
   rewriteWikilinks,
+  sameGraph,
   type VaultGraph,
   type VaultNote
 } from './model'
@@ -342,7 +343,10 @@ export class VaultStore {
   }
 
   private graphFor(notes: readonly VaultNote[]): VaultGraph {
-    return buildGraph(notes.map(note => this.cache.get(note.rel)?.index ?? { links: [], rel: note.rel, tags: [] }))
+    const next = buildGraph(notes.map(note => this.cache.get(note.rel)?.index ?? { links: [], rel: note.rel, tags: [] }))
+
+    // A focus rescan that changed nothing must not look like a new graph: that would restart the layout.
+    return sameGraph(this.state.graph, next) ? this.state.graph : next
   }
 
   private reindex(rel: string, text: string): void {

@@ -295,6 +295,29 @@ export function buildGraph(notes: readonly NoteIndex[]): VaultGraph {
   }
 }
 
+/**
+ * Whether two graphs are the same, node for node and edge for edge. The view rebuilds its simulation whenever the
+ * graph's identity changes, so a rescan that found nothing new must hand back the old object.
+ */
+export function sameGraph(a: VaultGraph, b: VaultGraph): boolean {
+  return (
+    a.nodes.length === b.nodes.length &&
+    a.edges.length === b.edges.length &&
+    a.nodes.every((node, i) => {
+      const other = b.nodes[i]!
+
+      return (
+        node.id === other.id &&
+        node.degree === other.degree &&
+        node.title === other.title &&
+        node.tags.length === other.tags.length &&
+        node.tags.every((tag, j) => tag === other.tags[j])
+      )
+    }) &&
+    a.edges.every((edge, i) => edge.source === b.edges[i]!.source && edge.target === b.edges[i]!.target)
+  )
+}
+
 /** Drawn (and collision) radius of a note: grows with its degree. */
 export const radiusOf = (node: Pick<GraphNode, 'degree'>): number => 3 + Math.sqrt(node.degree) * 1.7
 

@@ -41,7 +41,13 @@ const TOUCHED_MS = 10 * 60 * 1000
 
 /** A region is drawn (and can be hit) once its on-screen radius reaches this, and its label once it reaches the second. */
 const REGION_MIN_PX = 14
-const LABEL_MIN_PX = 40
+const LABEL_MIN_PX = 20
+/**
+ * Region labels are 11px, shrinking with the region to this floor. A label that does not fit the crescent above the
+ * content (which needs a region of about 60px radius for 11px text) is drawn at the floor, haloed, over the
+ * region's top instead — from LABEL_MIN_PX up, where the notes beneath are a few pixels each.
+ */
+const LABEL_COMPACT_PX = 9
 /** The camera "is in" a region once the region's on-screen radius reaches this fraction of the viewport's short side. */
 const CURRENT_FRACTION = 0.25
 /** The global Fit action never magnifies past this; framing a folder is not capped. */
@@ -193,6 +199,26 @@ export function GraphView(props: GraphViewProps) {
   }
 
   const paintRegions = (ctx: CanvasRenderingContext2D, ink: string, labelPlaced: [number, number, number, number][]) => {
+    // The first opaque background above the canvas, so a haloed label cuts a clean edge in any theme.
+    let haloColor: null | string = null
+
+    const halo = (): string => {
+      if (haloColor === null) {
+        haloColor = 'rgba(0, 0, 0, 0.55)'
+
+        for (let el: Element | null = canvasRef.current; el; el = el.parentElement) {
+          const bg = getComputedStyle(el).backgroundColor
+
+          if (bg && !/^rgba?(.*,s*0)$|^transparent$/.test(bg)) {
+            haloColor = bg
+            break
+          }
+        }
+      }
+
+      return haloColor
+    }
+
     const geo = geometryRef.current
     const { h, w } = sizeRef.current
     const { k, x, y } = viewRef.current
@@ -299,29 +325,46 @@ export function GraphView(props: GraphViewProps) {
 
       if (region.label && !covers && (s >= LABEL_MIN_PX || forced)) {
         const text = hidden ? `${region.label} ${t('graph.hiddenSuffix')}` : region.label
-        const width = ctx.measureText(text).width
-        const half = width / 2 + 3 / k
-        const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r
-        const dy = Math.max(3 / k, room)
 
-        const box: [number, number, number, number] = [
-          region.x - width / 2,
-          region.y - region.r + dy,
-          region.x + width / 2,
-          region.y - region.r + dy + fontPx * 1.15
-        ]
+        // Where `text` sits at `px` screen pixels: in the top of the region, as high as the circle's curve allows.
+        const lay = (px: number) => {
+          ctx.font = `600 ${px / k}px "Segoe UI", system-ui, -apple-system, sans-serif`
 
-        // The label belongs in the crescent above the content disc, where no note or child region can be.
-        // It is drawn unforced only while it fits there at this zoom, so it never sits on a note.
-        if (forced || (room < region.r && rectClearOf(box, region.content, 2 / k))) {
-          if (forced || !labelPlaced.some(p => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
-            labelPlaced.push(box)
-            labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id })
-            ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85
-            ctx.fillStyle = ink
-            ctx.fillText(text, region.x, box[1])
-          }
+          const width = ctx.measureText(text).width
+          const half = width / 2 + 3 / k
+          const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r
+          const top = region.y - region.r + Math.max(3 / k, room)
+
+          return { box: [region.x - width / 2, top, region.x + width / 2, top + (px / k) * 1.15] as [number, number, number, number], room, width }
         }
+
+        const taken = (box: readonly number[]) => labelPlaced.some(p => box[0]! < p[2] && box[2]! > p[0] && box[1]! < p[3] && box[3]! > p[1])
+        // The crescent above the content disc holds no note or child region, so a label that fits there is drawn
+        // as it is. The text shrinks with the region before it gives up on the crescent.
+        const sized = lay(Math.min(11, Math.max(LABEL_COMPACT_PX, s / 5)))
+        const clear = sized.room < region.r && rectClearOf(sized.box, region.content, 2 / k)
+        const overlay = forced || clear ? null : lay(LABEL_COMPACT_PX)
+        const spot = forced || clear ? sized : overlay && overlay.width <= 1.5 * region.r ? overlay : null
+
+        if (spot && (forced || !taken(spot.box))) {
+          const { box } = spot
+
+          labelPlaced.push(box)
+          labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id })
+          ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85
+
+          if (spot === overlay) {
+            ctx.lineJoin = 'round'
+            ctx.lineWidth = 3 / k
+            ctx.strokeStyle = halo()
+            ctx.strokeText(text, region.x, box[1])
+          }
+
+          ctx.fillStyle = ink
+          ctx.fillText(text, region.x, box[1])
+        }
+
+        ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`
       }
 
       for (const id of region.children) {

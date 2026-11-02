@@ -5,6 +5,7 @@
  */
 
 import {
+  type Force,
   forceCollide,
   forceLink,
   forceManyBody,
@@ -160,11 +161,51 @@ export interface LayoutSpec {
  * notes in the outer 5% of a compartment). With the legacy 0.07 pull and 340 repulsion range, 61% of notes sat on
  * the rim with internal links only and 83% with no links at all: not cross-folder tension, but the repulsion pushing
  * outward against a weak pull. Shortening the range to 60 and pulling at 0.25 brings internal-only to 4% (and no-links
- * to 43%). Cross-folder links add a separate tension (65% at 70% cross-links), so they are weakened to a third.
+ * to 43%). Cross-folder links add a separate tension (65% at 70% cross-links). A second pass (live vault, notes hugging the
+ * rim) found the cross-folder pull — proportional to a distance of hundreds — still beat the centring pull, and that plain
+ * repulsion alone leaves 44% on the rim; so cross links are weakened to 0.03 and an inset spring eases notes off the rim
+ * beyond half the usable radius (rim share 63% -> 10% at 70% cross-links, 27% -> 0% at 10%; mean radial fraction 0.5-0.6).
  */
 const NESTED_PULL = 0.25
 const NESTED_REPULSION_RANGE = 60
-const CROSS_LINK = 0.1
+const CROSS_LINK = 0.03
+/**
+ * Notes are eased off the rim: beyond this share of the usable radius a spring pushes them back, so a settled
+ * compartment reads as a filled disc rather than a ring. Gentle by design — the hard projection stays the guarantee.
+ */
+const INSET_START = 0.5
+const INSET_STRENGTH = 2
+
+function forceInset(geometry: Geometry): Force<SimNode, SimLink> {
+  let nodes: SimNode[] = []
+
+  const force = (alpha: number) => {
+    for (const node of nodes) {
+      const comp = compartmentOf(geometry, node.dir)
+
+      if (!comp || node.fx != null) {
+        continue
+      }
+
+      const room = Math.max(0, comp.r - radiusOf(node))
+      const dx = node.x - comp.x
+      const dy = node.y - comp.y
+      const d = Math.hypot(dx, dy)
+      const start = room * INSET_START
+
+      if (d > start && d > 0) {
+        const push = ((d - start) / d) * INSET_STRENGTH * alpha
+
+        node.vx! -= dx * push
+        node.vy! -= dy * push
+      }
+    }
+  }
+
+  force.initialize = (list: SimNode[]) => void (nodes = list)
+
+  return force
+}
 
 /** The simulation. Nested mode pulls each note toward its compartment's centre instead of its folder's anchor. */
 export function createSimulation(
@@ -180,7 +221,7 @@ export function createSimulation(
   const aim = (axis: 'x' | 'y') => (node: SimNode) =>
     nested ? (compartmentOf(geometry, node.dir)?.[axis] ?? 0) : (anchors.get(node.folder)?.[axis] ?? 0)
 
-  return forceSimulation<SimNode>(nodes)
+  const sim = forceSimulation<SimNode>(nodes)
     .alpha(alpha)
     .force(
       'link',
@@ -193,6 +234,8 @@ export function createSimulation(
     .force('collide', forceCollide<SimNode>().radius(node => radiusOf(node) + COLLIDE_PAD))
     .force('x', forceX<SimNode>(aim('x')).strength(pull))
     .force('y', forceY<SimNode>(aim('y')).strength(pull))
+
+  return nested ? sim.force('inset', forceInset(geometry)) : sim
 }
 
 /**
