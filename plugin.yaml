@@ -1,6 +1,6 @@
 ---
 name: hermes-plexus
-version: 0.3.0
+version: 0.4.0
 description: A local markdown vault as a note constellation, with file tree and tabbed editor in one Hermes Desktop workspace tab.
 manifest_version: 1
 author: mr-september
@@ -10,4 +10,4 @@ kind: standalone
 capabilities: []
 requires_env: []
 python_dependencies: []
-requires_hermes: ">=0.21.5"
+requires_hermes: ">=0.22.5"

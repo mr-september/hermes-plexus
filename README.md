@@ -2,7 +2,7 @@
 
 # Plexus
 
-Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). A graph of your notes and their `[[wikilinks]]`, a file tree and a tabbed editor, together in one tab. Fully local; your notes stay on your machine. Unofficial: not affiliated with Nous Research or Obsidian.
+Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). A graph of your notes and their `[[wikilinks]]`, a file tree, and a tabbed editor, together in one tab. Fully local; your notes stay on your machine. Unofficial: not affiliated with Nous Research or Obsidian.
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Local only](https://img.shields.io/badge/Data-local%20only-0ea5e9.svg)](#privacy)
@@ -20,11 +20,11 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
 
 - **Graph.** Notes are nodes, wikilinks are edges, and each top-level folder gets its own colour. Scroll to zoom, drag to pan or move a note, click to open, Shift+click to pin. The filter box dims what does not match (`#tag` works too), the target button shows only the open note and its neighbours, and the legend hides whole folders.
 - **Nested folders.** Switch the layout to **Nested** and every folder becomes a region inside its parent, with its notes inside it. Click a folder's name to zoom in, press Escape to zoom out, and press **H** to hide a folder you do not want in the picture.
-- **File tree.** Create, rename, move and trash notes. Renaming or moving a note updates the links that point to it.
-- **Editor.** Markdown with autosave, `[[` completion, Ctrl/⌘-click to follow a link, an Edit/Preview toggle and a backlinks list. Drag the divider to give the graph or the editor the whole tab.
+- **File tree.** Create, rename, move, and trash notes. Renaming or moving a note updates the links that point to it.
+- **Editor.** Markdown with autosave, `[[` completion, Ctrl/⌘-click to follow a link, an Edit/Preview toggle, and a backlinks list. Drag the divider to give the graph or the editor the whole tab.
 - **Wikilinks.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` jump to the right place; Preview shows images and embedded notes.
 - **Safe saves.** If a note changes on disk while you have unsaved edits, Plexus asks whether to reload or overwrite instead of silently choosing.
-- **Remembers where you were.** Open tabs, expanded folders, pinned notes and the graph layout are kept per vault, and you can switch between vaults.
+- **Remembers where you were.** Open tabs, expanded folders, pinned notes, and the graph layout are kept per vault, and you can switch between vaults.
 
 <div align="center">
 <table>
@@ -71,7 +71,7 @@ The screenshots come from fictional demo vaults (a made-up tide-pool research pr
 
 ## Install
 
-Install **Plexus** from Hermes Desktop's plugin marketplace (**Settings → Plugins**). Then open it from the **Vault** button in the status bar, the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G**, and choose the folder that holds your notes. Plexus settings are under **Settings → Plugins → Plexus**.
+Install **Plexus** from Hermes Desktop's plugin marketplace (**Settings → Plugins**). Then open it from the small **Vault** button at the bottom-right of the Hermes window (in the status bar, easy to miss), the command palette (**Open Vault**), or **Ctrl/⌘+Shift+G**, and choose the folder that holds your notes. Plexus settings are under **Settings → Plugins → Plexus**.
 
 To look around without your own notes, choose the `demo/vault` folder from this repository.
 
@@ -87,7 +87,7 @@ A note that does not exist is reported, never created.
 
 ## Privacy
 
-Plexus only reads and writes inside the vault folder you choose, which Hermes lists (and lets you revoke) under its folder-access settings. Deleting moves a note to the system trash. Settings, open tabs and graph layout are stored by Hermes on your machine. Nothing is sent anywhere; the one opt-in exception is images that a note links from the web, which stay as placeholders until you click **Load remote images** (that tells the image's host your IP address). Folders starting with a dot (`.obsidian`, `.git`) and `archive`/`_archived` are skipped by default.
+Plexus only reads and writes inside the vault folder you choose, which Hermes lists (and lets you revoke) under its folder-access settings. Deleting moves a note to the system trash. Settings, open tabs, and graph layout are stored by Hermes on your machine. Nothing is sent anywhere; the one opt-in exception is images that a note links from the web, which stay as placeholders until you click **Load remote images** (that tells the image's host your IP address). Folders starting with a dot (`.obsidian`, `.git`) and `archive`/`_archived` are skipped by default.
 
 ## Known limits
 
@@ -119,7 +119,7 @@ Free and open source. If it saved you time, you can chip in toward its upkeep.
 <a href="https://www.paypal.com/donate/?hosted_button_id=WFXL2T42BBCRN"><img src="https://raw.githubusercontent.com/mr-september/central_automation_hub/refs/heads/main/bluePayPalbutton.svg" alt="PayPal" height="32"></a>
 <a href="https://nowpayments.io/donation?api_key=5b5fabd5-2c33-4525-99a3-bf27f587780c"><img src="https://nowpayments.io/images/embeds/donation-button-black.svg" alt="Crypto donation button by NOWPayments" height="32"></a>
 
-Stars, bug reports and ideas for the graph help just as much.
+Stars, bug reports, and ideas for the graph help just as much.
 
 </div>
 
