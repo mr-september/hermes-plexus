@@ -48,11 +48,10 @@ Hidden-folder filtering is unchanged: the model has no note-to-region edges, so 
 
 ### Reciprocal links
 
-`buildGraph` keeps A→B and B→A as separate edges (its key is directional), so today they are two coincident strokes, which accumulate to about 0.58 where one edge is 0.35. Mutual links therefore look stronger by accident, not by design. Proposal:
+`buildGraph` keeps A→B and B→A as separate edges (its key is directional), so today they are two coincident strokes, which accumulate to about 0.58 where one edge is 0.35. Mutual links therefore look stronger by accident, not by design. Decision:
 
 - **At rest, draw one undirected line per linked pair.** Deduplicate for drawing (the model and link counts are untouched). Direction is not encoded in the overview: the graph has no arrowheads today, arrowheads at this density are clutter, and the dominant question in the overview is "are these related", not "who links to whom". A mutual link no longer looks stronger; that loses nothing the reader was meant to see.
-- **On focus, distinguish three kinds of incident edge**, since only the focused note's few edges are drawn emphatically: outgoing (accent), incoming (a second tint, such as a dimmer accent), and mutual (both tints, or the accent with a thicker line). This is cheap (incident edges only), is where direction is actually useful ("what does this note cite, what cites it"), and agrees with the backlinks the note pane already shows.
-- Deferred, since it needs a colour decision and a legend: the focus-time distinction can be skipped in the first increment, leaving the dedupe alone.
+- **Focus-time direction is deferred.** When built, it distinguishes three kinds of incident edge of the focused note: outgoing (accent), incoming (a dimmer accent), and mutual (both tints, or the accent with a thicker line). It is cheap (incident edges only), is where direction is actually useful ("what does this note cite, what cites it"), and agrees with the backlinks the note pane already shows. It needs a colour decision and a legend, so the first increment ships the dedupe alone and focused edges keep one accent colour.
 
 ### Viewport culling
 
@@ -93,7 +92,8 @@ No performance or coverage thresholds are proposed. Judge paint cost by bench nu
 
 ## Open questions
 
-1. Focus-time direction colours (outgoing, incoming, mutual): ship with the first increment or defer.
-2. Whether the dedupe should also apply to the model's link counts shown elsewhere (no: counts stay as they are).
-3. Whether batching is adopted, once the before and after images have been compared.
-4. The scope and timing of porting the tiers to the non-nested layouts.
+1. Focus-time direction colours (outgoing, incoming, mutual): deferred; decide the palette and legend when built.
+2. Whether batching is adopted, once the before and after images have been compared.
+3. The scope and timing of porting the tiers to the non-nested layouts.
+
+Settled: the dedupe is for drawing only; link counts shown elsewhere are unchanged.
