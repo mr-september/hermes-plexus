@@ -2,7 +2,7 @@
 // writes docs/screenshots/*.png. Only the host app around the plugin (SDK, theme tokens, markdown
 // renderer) is simulated, so these are representative, not literal Hermes Desktop captures.
 //
-//   node scripts/screenshots.mjs [scene …]      scenes: graph nested hidden noaccess note preview search local (each in dark and light)
+//   node scripts/screenshots.mjs [scene …]      scenes: hero heronest graph nested hidden noaccess note preview search local (each in dark and light)
 import { build } from 'esbuild'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -18,6 +18,8 @@ const work = join(tmpdir(), 'plexus-harness')
 
 const SCENES = {
   graph: 'overview',
+  hero: 'hero',
+  heronest: 'hero-nested',
   hidden: 'hidden-folders',
   local: 'local-graph',
   noaccess: 'no-access',
@@ -109,6 +111,8 @@ writeFileSync(
 // --screenshot with a virtual-time budget occasionally caught the canvas mid-resize, i.e. blank.)
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const DEFAULT_SIZE = { height: 880, scale: 1.5, width: 1400 }
+const HERO_SIZE = { height: 900, scale: 2, width: 1600 }
+const SCENE_SIZE = { hero: HERO_SIZE, heronest: HERO_SIZE }
 
 async function capture(scene, theme, file, { extra = '', size = DEFAULT_SIZE } = {}) {
   const { height, scale, width } = size
@@ -215,7 +219,7 @@ const wanted = (process.argv.slice(2).length ? process.argv.slice(2) : Object.ke
 for (const scene of wanted) {
   for (const theme of THEMES) {
     const file = join(outDir, `${SCENES[scene]}-${theme}.png`)
-    const ready = await capture(scene, theme, file)
+    const ready = await capture(scene, theme, file, { size: SCENE_SIZE[scene] ?? DEFAULT_SIZE })
 
     console.log(`${scene}/${theme}: ${file}${ready ? '' : '  (page never reported ready)'}`)
   }

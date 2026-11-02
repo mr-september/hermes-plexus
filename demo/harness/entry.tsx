@@ -18,26 +18,34 @@ const scene = params.get('scene') ?? 'graph'
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 installStyles()
 
-// The `nested` scene swaps the demo vault for a generated multi-level one (see demo/synthetic.ts), tuned from the URL hash.
-const nestedScene = scene === 'nested' || scene === 'hidden'
+// The `nested` and `hero` scenes swap the demo vault for a generated one (see demo/synthetic.ts), tuned from the URL hash.
+// `hero` (free folder clusters) and `heronest` (nested regions) are the large, graph-only showpieces: thousands of notes.
+const heroScene = scene === 'hero' || scene === 'heronest'
+const nestedScene = scene === 'nested' || scene === 'hidden' || scene === 'heronest'
 const num = (key: string, fallback: number) => Number(params.get(key) ?? fallback)
 
 const TOP = ['Projects', 'Research', 'Concepts', 'People', 'Daily', 'Reading']
 const SUB = ['Field', 'Lab', 'Models', 'Notes', 'Drafts']
+const GALAXY = ['Atlas', 'Bench', 'Cairn', 'Delta', 'Ember', 'Fjord', 'Grove', 'Harbor', 'Isle', 'Jetty', 'Kelp', 'Lagoon', 'Marsh', 'Nook']
 
-const vault = nestedScene
+const vault = nestedScene || heroScene
   ? {
       files: Object.fromEntries(
         syntheticNotes({
-          crossFraction: num('cross', 0.1),
-          depth: num('depth', 3),
-          branching: num('branching', 3),
-          folderName: (level, b) => (level === 0 ? TOP[b % TOP.length]! : `${SUB[(level + b) % SUB.length]}${level > 1 ? level : ''}`),
+          crossFraction: num('cross', heroScene ? 0.06 : 0.1),
+          depth: num('depth', heroScene && !nestedScene ? 1 : 3),
+          branching: num('branching', heroScene ? (nestedScene ? 5 : GALAXY.length) : 3),
+          folderName: (level, b) =>
+            level === 0
+              ? heroScene && !nestedScene
+                ? GALAXY[b % GALAXY.length]!
+                : TOP[b % TOP.length]!
+              : `${SUB[(level + b) % SUB.length]}${level > 1 ? level : ''}`,
           folderPerNote: params.get('per') === '1',
           links: num('links', 2),
-          notes: num('n', 220),
+          notes: num('n', heroScene ? 3000 : 220),
           seed: num('seed', 5),
-          skew: num('skew', 0.7)
+          skew: num('skew', heroScene ? 0.35 : 0.7)
         }).map(note => [note.rel, note.content])
       ),
       images: {}
@@ -66,9 +74,10 @@ const storage = {
 const prefs = new PrefsStore(storage)
 
 prefs.set({
-  cluster: nestedScene ? 'nested' : 'folder',
-  noteFrac: scene === 'graph' || nestedScene ? 0.5 : 0.44,
-  treeOpen: params.get('tree') !== '0'
+  cluster: nestedScene ? 'nested' : (params.get('cluster') as 'folder' | 'none' | null) ?? 'folder',
+  labels: heroScene ? 'never' : 'auto',
+  noteFrac: heroScene ? 0 : scene === 'graph' || nestedScene ? 0.5 : 0.44,
+  treeOpen: !heroScene && params.get('tree') !== '0'
 })
 prefs.useVault(ROOT)
 
@@ -133,7 +142,7 @@ async function drive() {
   }
 
   // Let the force layout settle before the capture.
-  await wait(3500)
+  await wait(num('settle', heroScene ? 15000 : 3500))
   document.title = 'ready'
 }
 

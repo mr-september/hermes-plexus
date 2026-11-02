@@ -201,7 +201,13 @@ function forceCompartmentCharge(geometry: Geometry, strength: number): Force<Sim
     const byDir = new Map<string, SimNode[]>()
 
     for (const node of nodes) {
-      byDir.set(node.dir, [...(byDir.get(node.dir) ?? []), node])
+      const members = byDir.get(node.dir)
+
+      if (members) {
+        members.push(node)
+      } else {
+        byDir.set(node.dir, [node])
+      }
     }
 
     groups = [...byDir]

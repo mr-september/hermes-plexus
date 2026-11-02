@@ -2043,25 +2043,6 @@ function FileTree(props) {
   ] });
 }
 
-// src/edges.ts
-var edgeClass = (a3, b) => a3.dir === b.dir ? "compartment" : a3.folder !== "" && a3.folder === b.folder ? "top" : "across";
-function drawnEdges(nodes, edges) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const { source, target } of edges) {
-    const s = nodes.get(source);
-    const t2 = nodes.get(target);
-    const key = source < target ? `${source}\0${target}` : `${target}\0${source}`;
-    if (!s || !t2 || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push({ class: edgeClass(s, t2), source: s, target: t2 });
-  }
-  return out;
-}
-var segmentInView = (a3, b, view, margin) => Math.max(a3.x, b.x) >= view.left - margin && Math.min(a3.x, b.x) <= view.right + margin && Math.max(a3.y, b.y) >= view.top - margin && Math.min(a3.y, b.y) <= view.bottom + margin;
-
 // src/graph-view.tsx
 import { Fragment, useEffect as useEffect3, useMemo as useMemo3, useRef as useRef3, useState as useState2 } from "react";
 import { Codicon as Codicon2, usePluginI18n as usePluginI18n4 } from "@hermes/plugin-sdk";
@@ -2140,63 +2121,24 @@ function zoomPath(from, to, w, h) {
   };
 }
 
-// src/hidden-controls.tsx
-import { usePluginI18n as usePluginI18n3 } from "@hermes/plugin-sdk";
-import { useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2 } from "react";
-import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
-function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
-  const t2 = usePluginI18n3(PLUGIN_ID);
-  const root = useRef2(null);
-  const refocus = useRef2(null);
-  const fallback = useRef2(null);
-  const known = useMemo2(() => knownFolders(nodes), [nodes]);
-  const represented = useMemo2(() => new Set(legendFolders), [legendFolders]);
-  const listed = entries.filter((entry) => !represented.has(entry));
-  const counts = useMemo2(() => new Map(listed.map((entry) => [entry, subtreeCount(nodes, entry)])), [listed.join("\0"), nodes]);
-  useEffect2(() => {
-    if (refocus.current === null) {
-      return;
+// src/edges.ts
+var edgeClass = (a3, b) => a3.dir === b.dir ? "compartment" : a3.folder !== "" && a3.folder === b.folder ? "top" : "across";
+function drawnEdges(nodes, edges) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const { source, target } of edges) {
+    const s = nodes.get(source);
+    const t2 = nodes.get(target);
+    const key = source < target ? `${source}\0${target}` : `${target}\0${source}`;
+    if (!s || !t2 || seen.has(key)) {
+      continue;
     }
-    const controls = root.current?.querySelectorAll("button[data-recovery]") ?? [];
-    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? fallback.current;
-    refocus.current = null;
-    fallback.current = null;
-    next?.focus();
-  }, [entries]);
-  if (!listed.length && entries.length < 2) {
-    return null;
+    seen.add(key);
+    out.push({ class: edgeClass(s, t2), source: s, target: t2 });
   }
-  const act = (event, run) => {
-    const all = [...root.current?.querySelectorAll("button[data-recovery]") ?? []];
-    refocus.current = Math.max(0, all.indexOf(event.currentTarget));
-    fallback.current = root.current?.closest(".vc-graph")?.querySelector("canvas.vc-canvas") ?? root.current?.closest(".vc-empty") ?? null;
-    run();
-  };
-  return /* @__PURE__ */ jsxs3("div", { "aria-label": t2("graph.hiddenGroup"), className: "vc-hidden", ref: root, role: "group", children: [
-    /* @__PURE__ */ jsxs3("span", { children: [
-      t2("graph.hiddenGroup"),
-      ":"
-    ] }),
-    listed.map((entry) => {
-      const name2 = entry === "" ? t2("graph.rootNotes") : entry;
-      const stale = !known.has(entry);
-      return /* @__PURE__ */ jsx3(
-        "button",
-        {
-          "aria-label": t2("graph.showFolder", name2),
-          "data-recovery": true,
-          "data-stale": stale,
-          onClick: (event) => act(event, () => onShow(entry)),
-          title: stale ? t2("graph.notInScan") : t2("graph.subtree", counts.get(entry) ?? 0),
-          type: "button",
-          children: stale ? `${name2} (${t2("graph.notInScan")})` : `${name2} \xB7 ${counts.get(entry) ?? 0}`
-        },
-        entry
-      );
-    }),
-    entries.length >= 2 && /* @__PURE__ */ jsx3("button", { "data-recovery": true, onClick: (event) => act(event, onClear), type: "button", children: t2("graph.showAll") })
-  ] });
+  return out;
 }
+var segmentInView = (a3, b, view, margin) => Math.max(a3.x, b.x) >= view.left - margin && Math.min(a3.x, b.x) <= view.right + margin && Math.max(a3.y, b.y) >= view.top - margin && Math.min(a3.y, b.y) <= view.bottom + margin;
 
 // node_modules/d3-quadtree/src/add.js
 function add_default(d) {
@@ -3559,7 +3501,12 @@ function forceCompartmentCharge(geometry, strength) {
   force.initialize = (nodes, random) => {
     const byDir = /* @__PURE__ */ new Map();
     for (const node of nodes) {
-      byDir.set(node.dir, [...byDir.get(node.dir) ?? [], node]);
+      const members = byDir.get(node.dir);
+      if (members) {
+        members.push(node);
+      } else {
+        byDir.set(node.dir, [node]);
+      }
     }
     groups = [...byDir].filter(([, members]) => members.length > 1).map(([dir, members]) => {
       const many = manyBody_default().strength(-strength * Math.min(1, members.length / CHARGE_FULL_AT)).distanceMax(2 * (compartmentOf(geometry, dir)?.r ?? Infinity));
@@ -3610,20 +3557,431 @@ function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
   return nested ? sim.force("inset", forceInset(geometry)) : sim;
 }
 
-// src/graph-view.tsx
-import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+// src/graph-nodes.ts
+function seedNodes(spec) {
+  const { anchors, cluster, geometry, graph, nestedPositions, pinned, previous, previousGeometry, saved } = spec;
+  const nested = cluster === "nested";
+  const perDir = /* @__PURE__ */ new Map();
+  for (const node of graph.nodes) {
+    perDir.set(node.dir, (perDir.get(node.dir) ?? 0) + 1);
+  }
+  const seen = /* @__PURE__ */ new Map();
+  let restored = 0;
+  const nodes = graph.nodes.map((node) => {
+    const index2 = seen.get(node.dir) ?? 0;
+    seen.set(node.dir, index2 + 1);
+    const comp = nested ? compartmentOf(geometry, node.dir) : void 0;
+    const old = previous.get(node.id);
+    let known;
+    if (nested) {
+      const oldComp = old && previousGeometry ? compartmentOf(previousGeometry, old.dir) : void 0;
+      const stored = nestedPositions[node.id];
+      if (comp && old && oldComp && old.dir === node.dir) {
+        const [x3, y3] = fromOffset(comp, (old.x - oldComp.x) / oldComp.r, (old.y - oldComp.y) / oldComp.r);
+        known = { x: x3, y: y3 };
+      } else if (comp && !old && stored && stored[0] === node.dir) {
+        const [x3, y3] = fromOffset(comp, stored[1], stored[2]);
+        known = { x: x3, y: y3 };
+      }
+    } else if (old) {
+      known = old;
+    } else if (saved?.[node.id]) {
+      known = { x: saved[node.id][0], y: saved[node.id][1] };
+    }
+    if (known) {
+      restored++;
+    }
+    const anchor = anchors.get(node.folder) ?? { x: 0, y: 0 };
+    const placed = {
+      ...node,
+      x: known?.x ?? anchor.x + (Math.random() - 0.5) * 40,
+      y: known?.y ?? anchor.y + (Math.random() - 0.5) * 40
+    };
+    if (comp && !known) {
+      seedInCompartment(placed, comp, index2, perDir.get(node.dir) ?? 1);
+    }
+    if (pinned.has(node.id)) {
+      placed.fx = placed.x;
+      placed.fy = placed.y;
+    }
+    return placed;
+  });
+  return { nodes, restored };
+}
+function occupiedRegions(nodes, geometry) {
+  const occupied = /* @__PURE__ */ new Set();
+  for (const node of nodes) {
+    for (let region = regionOfDir(geometry, node.dir); region && !occupied.has(region.id); ) {
+      occupied.add(region.id);
+      region = region.parent === null ? null : geometry.regions.get(region.parent) ?? null;
+    }
+  }
+  return occupied;
+}
+function nestedOffsets(nodes, geometry) {
+  const round = (value) => Math.round(value * 1e4) / 1e4;
+  const offsets = {};
+  for (const node of nodes) {
+    const comp = compartmentOf(geometry, node.dir);
+    if (comp) {
+      const [dir, u, v] = toOffset(node, comp);
+      offsets[node.id] = [dir, round(u), round(v)];
+    }
+  }
+  return offsets;
+}
+function adjacencyOf(links) {
+  const adjacency = /* @__PURE__ */ new Map();
+  const add2 = (from, to) => {
+    const list = adjacency.get(from);
+    if (list) {
+      list.push(to);
+    } else {
+      adjacency.set(from, [to]);
+    }
+  };
+  for (const link of links) {
+    const source = link.source.id;
+    const target = link.target.id;
+    add2(source, target);
+    add2(target, source);
+  }
+  return adjacency;
+}
+var HOPS = {
+  ArrowDown: [0, 1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1]
+};
+function hopTarget(key, from, nodes, adjacency) {
+  const dir = HOPS[key];
+  if (!dir) {
+    return null;
+  }
+  const linked = adjacency.get(from.id);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const pool = linked?.length ? linked.map((id) => byId.get(id)).filter((node) => node !== void 0) : nodes;
+  let best = null;
+  let bestScore = -Infinity;
+  for (const node of pool) {
+    if (node.id === from.id) {
+      continue;
+    }
+    const vx = node.x - from.x;
+    const vy = node.y - from.y;
+    const len = Math.hypot(vx, vy) || 1;
+    const alignment = (vx * dir[0] + vy * dir[1]) / len;
+    if (alignment > 0.3 && alignment / (1 + len / 200) > bestScore) {
+      best = node;
+      bestScore = alignment / (1 + len / 200);
+    }
+  }
+  return best;
+}
+
+// src/graph-paint.ts
 var TOUCHED_MS = 10 * 60 * 1e3;
 var REGION_MIN_PX = 14;
 var LABEL_MIN_PX = 20;
 var LABEL_COMPACT_PX = 9;
-var CURRENT_FRACTION = 0.25;
-var FIT_CAP = 1.8;
-var fontOf = (px, weight) => `${weight} ${px}px "Segoe UI", system-ui, -apple-system, sans-serif`;
-var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
-var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
 var EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 };
 var EDGE_ORDER = ["flat", "across", "top", "compartment"];
 var EDGE_RECEDE = 0.25;
+var MAX_NOTE_LABELS = 400;
+var fontOf = (px, weight) => `${weight} ${px}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
+var overlaps = (a3, b) => a3[0] < b[2] && a3[2] > b[0] && a3[1] < b[3] && a3[3] > b[1];
+var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
+function haloColor(canvas) {
+  for (let el = canvas; el; el = el.parentElement) {
+    const bg = getComputedStyle(el).backgroundColor;
+    if (bg && !/^rgba?\(.*,\s*0\)$|^transparent$/.test(bg)) {
+      return bg;
+    }
+  }
+  return "rgba(0, 0, 0, 0.55)";
+}
+var viewport = ({ size: { h, w }, view: { k, x: x3, y: y3 } }) => ({ bottom: (h - y3) / k, left: -x3 / k, right: (w - x3) / k, top: -y3 / k });
+function paintRegions(ctx, scene, placed) {
+  const { currentRegion, geometry: geo, hiddenFolders, hoverRegion: focusId, hueOf, ink, occupied } = scene;
+  const { k } = scene.view;
+  const { bottom, left, right, top: top2 } = viewport(scene);
+  const root = geo.root === null ? void 0 : geo.regions.get(geo.root);
+  const chain = new Set(focusId === null ? [] : regionChain(geo, focusId).map((region) => region.id));
+  const fontPx = 11 / k;
+  const labelBoxes = [];
+  let halo = null;
+  ctx.font = fontOf(fontPx, 600);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const disc = (cx, cy, r, hue, depth, lit, empty, own, dashed) => {
+    const recede = focusId !== null && !lit;
+    const faint = empty ? 0.35 : 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.globalAlpha = (own ? 0.05 : 0.16 / (1 + 0.45 * depth)) * (lit ? 1.7 : recede ? 0.45 : 1) * faint;
+    ctx.fillStyle = hsl(hue, Math.min(72, 50 + 4 * depth));
+    ctx.fill();
+    ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * (dashed ? 1 : faint);
+    ctx.strokeStyle = hsl(hue, Math.min(72, 54 + 4 * depth));
+    ctx.lineWidth = (lit ? 1.8 : 1) / k;
+    if (dashed) {
+      ctx.setLineDash([5 / k, 4 / k]);
+    }
+    ctx.stroke();
+    if (dashed) {
+      ctx.setLineDash([]);
+    }
+  };
+  const label = (region, text, lit, forced) => {
+    const lay = (px) => {
+      ctx.font = fontOf(px / k, 600);
+      const width = ctx.measureText(text).width;
+      const half = width / 2 + 3 / k;
+      const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
+      const y3 = region.y - region.r + Math.max(3 / k, room);
+      return { box: [region.x - width / 2, y3, region.x + width / 2, y3 + px / k * 1.15], room, width };
+    };
+    const s = region.r * k;
+    const sized = lay(Math.min(11, Math.max(LABEL_COMPACT_PX, s / 5)));
+    const clear = sized.room < region.r && rectClearOf(sized.box, region.content, 2 / k);
+    const overlay = forced || clear ? null : lay(LABEL_COMPACT_PX);
+    const spot = forced || clear ? sized : overlay && overlay.width <= 1.5 * region.r ? overlay : null;
+    if (spot && (forced || !placed.some((p) => overlaps(spot.box, p)))) {
+      const { box } = spot;
+      placed.push(box);
+      labelBoxes.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });
+      ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85;
+      if (spot === overlay) {
+        halo ??= haloColor(scene.canvas);
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 3 / k;
+        ctx.strokeStyle = halo;
+        ctx.strokeText(text, region.x, box[1]);
+      }
+      ctx.fillStyle = ink;
+      ctx.fillText(text, region.x, box[1]);
+    }
+    ctx.font = fontOf(fontPx, 600);
+  };
+  const visit = (region) => {
+    const s = region.r * k;
+    if (s < REGION_MIN_PX || region.x + region.r < left || region.x - region.r > right || region.y + region.r < top2 || region.y - region.r > bottom) {
+      return;
+    }
+    const hue = hueOf(region.top);
+    const lit = chain.has(region.id);
+    const covers2 = [
+      [left, top2],
+      [right, top2],
+      [left, bottom],
+      [right, bottom]
+    ].every(([px, py]) => Math.hypot(px - region.x, py - region.y) < region.r);
+    const hidden = region.id !== "" && isHiddenDir(hiddenFolders, region.id);
+    const empty = !occupied.has(region.id);
+    if (!covers2 && region.id !== "") {
+      disc(region.x, region.y, region.r, hue, region.depth, lit, empty, false, hidden);
+    }
+    const comp = region.compartment;
+    if (comp && region.id === "" && hiddenFolders.has("") && region.children.length && comp.r * k >= REGION_MIN_PX) {
+      disc(comp.x, comp.y, comp.r, hue, region.depth + 1, lit, empty, true, true);
+    }
+    const forced = region.id === focusId || region.id === currentRegion;
+    if (region.label && !covers2 && (s >= LABEL_MIN_PX || forced)) {
+      label(region, hidden ? `${region.label} ${scene.hiddenSuffix}` : region.label, lit, forced);
+    }
+    for (const id of region.children) {
+      visit(geo.regions.get(id));
+    }
+  };
+  if (root) {
+    visit(root);
+  }
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1 / k;
+  return labelBoxes;
+}
+function paintEdges(ctx, scene) {
+  const { accent, focus, hueOf, muted, tierEdges } = scene;
+  const { k } = scene.view;
+  const view = viewport(scene);
+  const margin = 1 / k;
+  const incident = [];
+  const groups = /* @__PURE__ */ new Map();
+  for (const edge of scene.edges) {
+    if (!segmentInView(edge.source, edge.target, view, margin)) {
+      continue;
+    }
+    if (focus !== null && (edge.source.id === focus || edge.target.id === focus)) {
+      incident.push(edge);
+      continue;
+    }
+    const hue = hueOf(edge.source.folder);
+    const cls = tierEdges ? edge.class : "flat";
+    const neutral = cls === "across" || cls === "flat";
+    const key = neutral ? cls : `${cls}:${hue}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        alpha: (cls === "flat" ? 0.35 : EDGE_ALPHA[cls]) * (focus === null ? 1 : EDGE_RECEDE),
+        color: neutral ? muted : hsl(hue, 58),
+        edges: [],
+        rank: EDGE_ORDER.indexOf(cls)
+      };
+      groups.set(key, group);
+    }
+    group.edges.push(edge);
+  }
+  const stroke = (edges, color, alpha) => {
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (const { source, target } of edges) {
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
+    }
+    ctx.stroke();
+  };
+  for (const group of [...groups.values()].sort((p, q) => p.rank - q.rank)) {
+    stroke(group.edges, group.color, group.alpha);
+  }
+  stroke(incident, accent, 0.9);
+}
+function paintNodes(ctx, scene) {
+  const { accent, focus, hueOf, ink, near, openRels, pinned, search, selected, touched } = scene;
+  const { k } = scene.view;
+  const searching = search.trim().length > 0;
+  const now2 = Date.now();
+  for (const node of scene.nodes) {
+    const dim = focus !== null && !near.has(node.id) || searching && !matchesSearch(node, search);
+    const r = radiusOf(node);
+    const touchedAt = touched[node.id];
+    ctx.globalAlpha = dim ? 0.16 : 1;
+    ctx.fillStyle = hsl(hueOf(node.folder), 58);
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (touchedAt !== void 0 && now2 - touchedAt < TOUCHED_MS) {
+      ctx.globalAlpha = dim ? 0.3 : 0.9;
+      ctx.strokeStyle = accent;
+      ctx.setLineDash([2 / k, 2 / k]);
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + 6 / k, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (openRels.has(node.id) || node.id === selected) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2 / k;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + 3 / k, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1 / k;
+    }
+    if (pinned.has(node.id)) {
+      ctx.globalAlpha = dim ? 0.3 : 1;
+      ctx.fillStyle = ink;
+      ctx.fillRect(node.x - 1.5 / k, node.y - r - 5 / k, 3 / k, 3 / k);
+    }
+  }
+}
+function paintNoteLabels(ctx, scene, placed) {
+  const { focus, ink, labelMode, near, search } = scene;
+  const { k } = scene.view;
+  const searching = search.trim().length > 0;
+  const fontPx = 11 / k;
+  ctx.fillStyle = ink;
+  ctx.font = fontOf(fontPx, 400);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const priority = (node, matched) => node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree;
+  const candidates = scene.nodes.map((node) => ({ matched: searching && matchesSearch(node, search), node })).filter(({ matched, node }) => {
+    if (labelMode === "never") {
+      return node.id === focus;
+    }
+    if (focus !== null && !near.has(node.id) && !matched) {
+      return false;
+    }
+    return labelMode === "always" || node.id === focus || near.has(node.id) || matched || node.degree >= 6 || k > 1.2;
+  }).sort((a3, b) => priority(b.node, b.matched) - priority(a3.node, a3.matched)).slice(0, MAX_NOTE_LABELS);
+  for (const { matched, node } of candidates) {
+    const width = ctx.measureText(node.title).width;
+    const left = node.x - width / 2;
+    const top2 = node.y + radiusOf(node) + 2 / k;
+    const box = [left, top2, left + width, top2 + fontPx * 1.15];
+    if (node.id !== focus && placed.some((p) => overlaps(box, p))) {
+      continue;
+    }
+    placed.push(box);
+    ctx.globalAlpha = node.id === focus ? 1 : matched || near.has(node.id) ? 0.95 : 0.8;
+    ctx.fillText(node.title, node.x, top2);
+  }
+}
+
+// src/hidden-controls.tsx
+import { usePluginI18n as usePluginI18n3 } from "@hermes/plugin-sdk";
+import { useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2 } from "react";
+import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+function HiddenControls({ entries, legendFolders, nodes, onClear, onShow }) {
+  const t2 = usePluginI18n3(PLUGIN_ID);
+  const root = useRef2(null);
+  const refocus = useRef2(null);
+  const fallback = useRef2(null);
+  const known = useMemo2(() => knownFolders(nodes), [nodes]);
+  const represented = useMemo2(() => new Set(legendFolders), [legendFolders]);
+  const listed = entries.filter((entry) => !represented.has(entry));
+  const counts = useMemo2(() => new Map(listed.map((entry) => [entry, subtreeCount(nodes, entry)])), [listed.join("\0"), nodes]);
+  useEffect2(() => {
+    if (refocus.current === null) {
+      return;
+    }
+    const controls = root.current?.querySelectorAll("button[data-recovery]") ?? [];
+    const next = controls[Math.min(refocus.current, controls.length - 1)] ?? fallback.current;
+    refocus.current = null;
+    fallback.current = null;
+    next?.focus();
+  }, [entries]);
+  if (!listed.length && entries.length < 2) {
+    return null;
+  }
+  const act = (event, run) => {
+    const all = [...root.current?.querySelectorAll("button[data-recovery]") ?? []];
+    refocus.current = Math.max(0, all.indexOf(event.currentTarget));
+    fallback.current = root.current?.closest(".vc-graph")?.querySelector("canvas.vc-canvas") ?? root.current?.closest(".vc-empty") ?? null;
+    run();
+  };
+  return /* @__PURE__ */ jsxs3("div", { "aria-label": t2("graph.hiddenGroup"), className: "vc-hidden", ref: root, role: "group", children: [
+    /* @__PURE__ */ jsxs3("span", { children: [
+      t2("graph.hiddenGroup"),
+      ":"
+    ] }),
+    listed.map((entry) => {
+      const name2 = entry === "" ? t2("graph.rootNotes") : entry;
+      const stale = !known.has(entry);
+      return /* @__PURE__ */ jsx3(
+        "button",
+        {
+          "aria-label": t2("graph.showFolder", name2),
+          "data-recovery": true,
+          "data-stale": stale,
+          onClick: (event) => act(event, () => onShow(entry)),
+          title: stale ? t2("graph.notInScan") : t2("graph.subtree", counts.get(entry) ?? 0),
+          type: "button",
+          children: stale ? `${name2} (${t2("graph.notInScan")})` : `${name2} \xB7 ${counts.get(entry) ?? 0}`
+        },
+        entry
+      );
+    }),
+    entries.length >= 2 && /* @__PURE__ */ jsx3("button", { "data-recovery": true, onClick: (event) => act(event, onClear), type: "button", children: t2("graph.showAll") })
+  ] });
+}
+
+// src/graph-view.tsx
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+var CURRENT_FRACTION = 0.25;
+var FIT_CAP = 1.8;
 function GraphView(props) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props;
   const nested = cluster === "nested";
@@ -3633,6 +3991,7 @@ function GraphView(props) {
   const simRef = useRef3(null);
   const nodesRef = useRef3([]);
   const linksRef = useRef3([]);
+  const adjacencyRef = useRef3(/* @__PURE__ */ new Map());
   const edgesRef = useRef3([]);
   const viewRef = useRef3({ k: 1, x: 0, y: 0 });
   const sizeRef = useRef3({ h: 0, w: 0 });
@@ -3693,129 +4052,6 @@ function GraphView(props) {
       setHoverRegion(id);
     }
   };
-  const paintRegions = (ctx, ink, labelPlaced) => {
-    let haloColor = null;
-    const halo = () => {
-      if (haloColor === null) {
-        haloColor = "rgba(0, 0, 0, 0.55)";
-        for (let el = canvasRef.current; el; el = el.parentElement) {
-          const bg = getComputedStyle(el).backgroundColor;
-          if (bg && !/^rgba?(.*,s*0)$|^transparent$/.test(bg)) {
-            haloColor = bg;
-            break;
-          }
-        }
-      }
-      return haloColor;
-    };
-    const geo = geometryRef.current;
-    const { h, w } = sizeRef.current;
-    const { k, x: x3, y: y3 } = viewRef.current;
-    const root = geo.root === null ? void 0 : geo.regions.get(geo.root);
-    const left = -x3 / k;
-    const top2 = -y3 / k;
-    const right = (w - x3) / k;
-    const bottom = (h - y3) / k;
-    const focusId = hoverRegionRef.current;
-    const chain = new Set(focusId === null ? [] : regionChain(geo, focusId).map((region) => region.id));
-    const fontPx = 11 / k;
-    labelBoxesRef.current = [];
-    ctx.font = fontOf(fontPx, 600);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    const disc = (cx, cy, r, hue, depth, lit, empty, own, dashed) => {
-      const recede = focusId !== null && !lit;
-      const faint = empty ? 0.35 : 1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.globalAlpha = (own ? 0.05 : 0.16 / (1 + 0.45 * depth)) * (lit ? 1.7 : recede ? 0.45 : 1) * faint;
-      ctx.fillStyle = hsl(hue, Math.min(72, 50 + 4 * depth));
-      ctx.fill();
-      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * (dashed ? 1 : faint);
-      ctx.strokeStyle = hsl(hue, Math.min(72, 54 + 4 * depth));
-      ctx.lineWidth = (lit ? 1.8 : 1) / k;
-      if (dashed) {
-        ctx.setLineDash([5 / k, 4 / k]);
-      }
-      ctx.stroke();
-      if (dashed) {
-        ctx.setLineDash([]);
-      }
-    };
-    const visit = (region) => {
-      const s = region.r * k;
-      if (s < REGION_MIN_PX || region.x + region.r < left || region.x - region.r > right || region.y + region.r < top2 || region.y - region.r > bottom) {
-        return;
-      }
-      const hue = colorOf(region.top);
-      const lit = chain.has(region.id);
-      const covers2 = [
-        [left, top2],
-        [right, top2],
-        [left, bottom],
-        [right, bottom]
-      ].every(([px, py]) => Math.hypot(px - region.x, py - region.y) < region.r);
-      const hiddenSet = live.current.hiddenFolders;
-      const hidden = region.id !== "" && isHiddenDir(hiddenSet, region.id);
-      if (!covers2 && region.id !== "") {
-        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false, hidden);
-      }
-      const comp = region.compartment;
-      if (comp && region.id === "" && hiddenSet.has("") && region.children.length && comp.r * k >= REGION_MIN_PX) {
-        disc(
-          comp.x,
-          comp.y,
-          comp.r,
-          hue,
-          region.depth + 1,
-          lit,
-          !occupiedRef.current.has(region.id),
-          true,
-          true
-        );
-      }
-      const forced = region.id === focusId || region.id === currentRef.current;
-      if (region.label && !covers2 && (s >= LABEL_MIN_PX || forced)) {
-        const text = hidden ? `${region.label} ${t2("graph.hiddenSuffix")}` : region.label;
-        const lay = (px) => {
-          ctx.font = fontOf(px / k, 600);
-          const width = ctx.measureText(text).width;
-          const half = width / 2 + 3 / k;
-          const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
-          const top3 = region.y - region.r + Math.max(3 / k, room);
-          return { box: [region.x - width / 2, top3, region.x + width / 2, top3 + px / k * 1.15], room, width };
-        };
-        const taken = (box) => labelPlaced.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1]);
-        const sized = lay(Math.min(11, Math.max(LABEL_COMPACT_PX, s / 5)));
-        const clear = sized.room < region.r && rectClearOf(sized.box, region.content, 2 / k);
-        const overlay = forced || clear ? null : lay(LABEL_COMPACT_PX);
-        const spot = forced || clear ? sized : overlay && overlay.width <= 1.5 * region.r ? overlay : null;
-        if (spot && (forced || !taken(spot.box))) {
-          const { box } = spot;
-          labelPlaced.push(box);
-          labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });
-          ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85;
-          if (spot === overlay) {
-            ctx.lineJoin = "round";
-            ctx.lineWidth = 3 / k;
-            ctx.strokeStyle = halo();
-            ctx.strokeText(text, region.x, box[1]);
-          }
-          ctx.fillStyle = ink;
-          ctx.fillText(text, region.x, box[1]);
-        }
-        ctx.font = fontOf(fontPx, 600);
-      }
-      for (const id of region.children) {
-        visit(geo.regions.get(id));
-      }
-    };
-    if (root) {
-      visit(root);
-    }
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = 1 / k;
-  };
   const paint = () => {
     const canvas = canvasRef.current;
     if (!canvas || sizeRef.current.w === 0) {
@@ -3826,143 +4062,52 @@ function GraphView(props) {
       return;
     }
     const started = live.current.onPaintTime ? performance.now() : 0;
-    const { openRels, pinned, search, selected: current2, touched, labels: labelMode } = live.current;
+    const { edges, hiddenFolders: hidden, labels: labelMode, openRels, pinned, search, selected: current2, tierEdges, touched } = live.current;
     const dpr = window.devicePixelRatio || 1;
     const { h, w } = sizeRef.current;
     const { k, x: x3, y: y3 } = viewRef.current;
     const style = getComputedStyle(canvas);
-    const ink = style.getPropertyValue("--ui-text-secondary").trim() || "#888";
-    const muted = style.getPropertyValue("--ui-stroke-secondary").trim() || "#8885";
-    const accent = style.getPropertyValue("--ui-accent").trim() || "#4a9eff";
     const focus = hoverRef.current ?? cursorRef.current ?? current2;
-    const near = /* @__PURE__ */ new Set();
-    const searching = search.trim().length > 0;
-    const now2 = Date.now();
-    if (focus) {
-      near.add(focus);
-      for (const link of linksRef.current) {
-        const s = link.source.id;
-        const target = link.target.id;
-        if (s === focus) {
-          near.add(target);
-        } else if (target === focus) {
-          near.add(s);
-        }
-      }
-    }
+    const scene = {
+      accent: style.getPropertyValue("--ui-accent").trim() || "#4a9eff",
+      canvas,
+      currentRegion: currentRef.current,
+      edges: edgesRef.current,
+      edgesOn: edges !== false,
+      focus,
+      geometry: geometryRef.current,
+      hiddenFolders: hidden,
+      hiddenSuffix: t2("graph.hiddenSuffix"),
+      hoverRegion: hoverRegionRef.current,
+      hueOf: colorOf,
+      ink: style.getPropertyValue("--ui-text-secondary").trim() || "#888",
+      labelMode,
+      muted: style.getPropertyValue("--ui-stroke-secondary").trim() || "#8885",
+      near: new Set(focus ? [focus, ...adjacencyRef.current.get(focus) ?? []] : []),
+      nested,
+      nodes: nodesRef.current,
+      occupied: occupiedRef.current,
+      openRels,
+      pinned,
+      search,
+      selected: current2,
+      size: sizeRef.current,
+      tierEdges: tierEdges !== false,
+      touched,
+      view: viewRef.current
+    };
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.translate(x3, y3);
     ctx.scale(k, k);
     ctx.lineWidth = 1 / k;
     const placed = [];
-    if (nested) {
-      paintRegions(ctx, ink, placed);
+    labelBoxesRef.current = nested ? paintRegions(ctx, scene, placed) : [];
+    if (scene.edgesOn) {
+      paintEdges(ctx, scene);
     }
-    if (live.current.edges !== false) {
-      const tiered = live.current.tierEdges !== false;
-      const view = { bottom: (h - y3) / k, left: -x3 / k, right: (w - x3) / k, top: -y3 / k };
-      const margin = 1 / k;
-      const incident = [];
-      const groups = /* @__PURE__ */ new Map();
-      for (const edge of edgesRef.current) {
-        if (!segmentInView(edge.source, edge.target, view, margin)) {
-          continue;
-        }
-        if (focus !== null && (edge.source.id === focus || edge.target.id === focus)) {
-          incident.push(edge);
-          continue;
-        }
-        const hue = colorOf(edge.source.folder);
-        const cls = tiered ? edge.class : "flat";
-        const key = cls === "across" || cls === "flat" ? cls : `${cls}:${hue}`;
-        let group = groups.get(key);
-        if (!group) {
-          group = {
-            alpha: (cls === "flat" ? 0.35 : EDGE_ALPHA[cls]) * (focus === null ? 1 : EDGE_RECEDE),
-            color: cls === "across" || cls === "flat" ? muted : hsl(hue, 58),
-            edges: [],
-            rank: EDGE_ORDER.indexOf(cls)
-          };
-          groups.set(key, group);
-        }
-        group.edges.push(edge);
-      }
-      const stroke = (edges, color, alpha) => {
-        ctx.globalAlpha = alpha;
-        ctx.strokeStyle = color;
-        ctx.beginPath();
-        for (const { source: source2, target } of edges) {
-          ctx.moveTo(source2.x, source2.y);
-          ctx.lineTo(target.x, target.y);
-        }
-        ctx.stroke();
-      };
-      for (const group of [...groups.values()].sort((p, q) => p.rank - q.rank)) {
-        stroke(group.edges, group.color, group.alpha);
-      }
-      stroke(incident, accent, 0.9);
-    }
-    for (const node of nodesRef.current) {
-      const dim = focus !== null && !near.has(node.id) || searching && !matchesSearch(node, search);
-      const r = radiusOf(node);
-      ctx.globalAlpha = dim ? 0.16 : 1;
-      ctx.fillStyle = hsl(colorOf(node.folder), 58);
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      const recent = now2 - (touched[node.id] ?? 0) < TOUCHED_MS && touched[node.id] !== void 0;
-      if (recent) {
-        ctx.globalAlpha = dim ? 0.3 : 0.9;
-        ctx.strokeStyle = accent;
-        ctx.setLineDash([2 / k, 2 / k]);
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r + 6 / k, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      if (openRels.has(node.id) || node.id === current2) {
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 2 / k;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r + 3 / k, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.lineWidth = 1 / k;
-      }
-      if (pinned.has(node.id)) {
-        ctx.globalAlpha = dim ? 0.3 : 1;
-        ctx.fillStyle = ink;
-        ctx.fillRect(node.x - 1.5 / k, node.y - r - 5 / k, 3 / k, 3 / k);
-      }
-    }
-    const fontPx = 11 / k;
-    ctx.fillStyle = ink;
-    ctx.font = fontOf(fontPx, 400);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    const priority = (node, matched) => node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree;
-    const candidates = nodesRef.current.map((node) => ({ matched: searching && matchesSearch(node, search), node })).filter(({ matched, node }) => {
-      if (labelMode === "never") {
-        return node.id === focus;
-      }
-      if (focus !== null && !near.has(node.id) && !matched) {
-        return false;
-      }
-      return labelMode === "always" || node.id === focus || near.has(node.id) || matched || node.degree >= 6 || k > 1.2;
-    }).sort((a3, b) => priority(b.node, b.matched) - priority(a3.node, a3.matched)).slice(0, 400);
-    for (const { matched, node } of candidates) {
-      const width = ctx.measureText(node.title).width;
-      const left = node.x - width / 2;
-      const top2 = node.y + radiusOf(node) + 2 / k;
-      const box = [left, top2, left + width, top2 + fontPx * 1.15];
-      if (node.id !== focus && placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
-        continue;
-      }
-      placed.push(box);
-      ctx.globalAlpha = node.id === focus ? 1 : matched || near.has(node.id) ? 0.95 : 0.8;
-      ctx.fillText(node.title, node.x, top2);
-    }
+    paintNodes(ctx, scene);
+    paintNoteLabels(ctx, scene, placed);
     ctx.globalAlpha = 1;
     live.current.onPaintTime?.(performance.now() - started);
   };
@@ -4027,12 +4172,16 @@ function GraphView(props) {
     if (!nodes.length || !w || !h) {
       return;
     }
-    const xs = nodes.map((node) => node.x);
-    const ys = nodes.map((node) => node.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      maxX = Math.max(maxX, node.x);
+      minY = Math.min(minY, node.y);
+      maxY = Math.max(maxY, node.y);
+    }
     const pad = 48;
     const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), FIT_CAP);
     viewRef.current = { k, x: w / 2 - (minX + maxX) / 2 * k, y: h / 2 - (minY + maxY) / 2 * k };
@@ -4042,56 +4191,17 @@ function GraphView(props) {
     const previousLayout = layoutRef.current;
     const sameMode = previousLayout?.mode === cluster;
     const previous = new Map(nodesRef.current.map((node) => [node.id, node]));
-    const saved = live.current.positions;
-    const savedNested = live.current.nestedPositions ?? {};
     const savedMode = live.current.positionsMode;
-    const absoluteSaved = !nested && (savedMode === void 0 || savedMode === cluster);
-    const pinnedNow = live.current.pinned;
-    const anchors = folderAnchors(folders, cluster);
-    const perDir = /* @__PURE__ */ new Map();
-    for (const node of graph.nodes) {
-      perDir.set(node.dir, (perDir.get(node.dir) ?? 0) + 1);
-    }
-    const seen = /* @__PURE__ */ new Map();
-    let restored = 0;
-    const nodes = graph.nodes.map((node) => {
-      const index2 = seen.get(node.dir) ?? 0;
-      seen.set(node.dir, index2 + 1);
-      const comp = nested ? compartmentOf(geometry, node.dir) : void 0;
-      const old = sameMode ? previous.get(node.id) : void 0;
-      let known2;
-      if (nested) {
-        const oldComp = old && previousLayout ? compartmentOf(previousLayout.geometry, old.dir) : void 0;
-        const stored = savedNested[node.id];
-        if (comp && old && oldComp && old.dir === node.dir) {
-          const [x3, y3] = fromOffset(comp, (old.x - oldComp.x) / oldComp.r, (old.y - oldComp.y) / oldComp.r);
-          known2 = { x: x3, y: y3 };
-        } else if (comp && !old && stored && stored[0] === node.dir) {
-          const [x3, y3] = fromOffset(comp, stored[1], stored[2]);
-          known2 = { x: x3, y: y3 };
-        }
-      } else if (old) {
-        known2 = old;
-      } else if (absoluteSaved && saved[node.id]) {
-        known2 = { x: saved[node.id][0], y: saved[node.id][1] };
-      }
-      if (known2) {
-        restored++;
-      }
-      const anchor = anchors.get(node.folder) ?? { x: 0, y: 0 };
-      const placed = {
-        ...node,
-        x: known2?.x ?? anchor.x + (Math.random() - 0.5) * 40,
-        y: known2?.y ?? anchor.y + (Math.random() - 0.5) * 40
-      };
-      if (comp && !known2) {
-        seedInCompartment(placed, comp, index2, perDir.get(node.dir) ?? 1);
-      }
-      if (pinnedNow.has(node.id)) {
-        placed.fx = placed.x;
-        placed.fy = placed.y;
-      }
-      return placed;
+    const { nodes, restored } = seedNodes({
+      anchors: folderAnchors(folders, cluster),
+      cluster,
+      geometry,
+      graph,
+      nestedPositions: live.current.nestedPositions ?? {},
+      pinned: live.current.pinned,
+      previous: sameMode ? previous : /* @__PURE__ */ new Map(),
+      previousGeometry: previousLayout?.geometry,
+      saved: !nested && (savedMode === void 0 || savedMode === cluster) ? live.current.positions : void 0
     });
     if (nested) {
       containAll(nodes, geometry);
@@ -4102,18 +4212,10 @@ function GraphView(props) {
     const bigChange = previous.size > 0 && changed >= Math.max(3, 0.25 * Math.max(previous.size, nodes.length));
     nodesRef.current = nodes;
     linksRef.current = links;
+    adjacencyRef.current = adjacencyOf(links);
     edgesRef.current = drawnEdges(new Map(nodes.map((node) => [node.id, node])), graph.edges);
+    occupiedRef.current = nested ? occupiedRegions(nodes, geometry) : /* @__PURE__ */ new Set();
     simRef.current?.stop();
-    const occupied = /* @__PURE__ */ new Set();
-    if (nested) {
-      for (const node of nodes) {
-        for (let region = regionOfDir(geometry, node.dir); region && !occupied.has(region.id); ) {
-          occupied.add(region.id);
-          region = region.parent === null ? null : geometry.regions.get(region.parent) ?? null;
-        }
-      }
-    }
-    occupiedRef.current = occupied;
     const warm = nodes.length > 0 && restored / nodes.length > 0.8;
     const sim = createSimulation(nodes, links, { cluster, folders, geometry }, warm ? 0.08 : 1).on("tick", () => {
       if (nested) {
@@ -4127,18 +4229,7 @@ function GraphView(props) {
         fit();
       }
       if (nested) {
-        live.current.onNestedPositions?.(
-          Object.fromEntries(
-            nodesRef.current.flatMap((node) => {
-              const comp = compartmentOf(geometry, node.dir);
-              if (!comp) {
-                return [];
-              }
-              const [dir, u, v] = toOffset(node, comp);
-              return [[node.id, [dir, Math.round(u * 1e4) / 1e4, Math.round(v * 1e4) / 1e4]]];
-            })
-          )
-        );
+        live.current.onNestedPositions?.(nestedOffsets(nodesRef.current, geometry));
       } else {
         live.current.onPositions(
           cluster,
@@ -4380,42 +4471,18 @@ function GraphView(props) {
       return;
     }
     const nodes = nodesRef.current;
-    const byId = new Map(nodes.map((node) => [node.id, node]));
-    const current2 = byId.get(cursorRef.current ?? selected ?? "") ?? [...nodes].sort((a3, b) => b.degree - a3.degree)[0];
+    const current2 = nodes.find((node) => node.id === (cursorRef.current ?? selected ?? "")) ?? [...nodes].sort((a3, b) => b.degree - a3.degree)[0];
     if (!current2) {
       return;
     }
-    const dir = {
-      ArrowDown: [0, 1],
-      ArrowLeft: [-1, 0],
-      ArrowRight: [1, 0],
-      ArrowUp: [0, -1]
-    };
     if (event.key === "Enter") {
       onOpen(current2.id);
     } else if (event.key.toLowerCase() === "p") {
       live.current.onTogglePin(current2.id);
-    } else if (dir[event.key]) {
-      const [dx, dy] = dir[event.key];
-      const linked = /* @__PURE__ */ new Set();
-      for (const link of linksRef.current) {
-        const s = link.source.id;
-        const target = link.target.id;
-        if (s === current2.id) {
-          linked.add(target);
-        } else if (target === current2.id) {
-          linked.add(s);
-        }
-      }
-      const pool = (linked.size ? [...linked] : nodes.map((node) => node.id)).map((id) => byId.get(id)).filter(Boolean);
-      const best = pool.filter((node) => node.id !== current2.id).map((node) => {
-        const vx = node.x - current2.x;
-        const vy = node.y - current2.y;
-        const len = Math.hypot(vx, vy) || 1;
-        return { alignment: (vx * dx + vy * dy) / len, dist: len, node };
-      }).filter((item) => item.alignment > 0.3).sort((a3, b) => b.alignment / (1 + b.dist / 200) - a3.alignment / (1 + a3.dist / 200))[0];
-      if (best) {
-        cursorRef.current = best.node.id;
+    } else if (event.key.startsWith("Arrow")) {
+      const next = hopTarget(event.key, current2, nodes, adjacencyRef.current);
+      if (next) {
+        cursorRef.current = next.id;
       }
     } else {
       return;
@@ -11192,8 +11259,8 @@ var DocView = class {
     }
     return scan(tile, offset);
   }
-  measureVisibleLineHeights(viewport) {
-    let result = [], { from, to } = viewport;
+  measureVisibleLineHeights(viewport2) {
+    let result = [], { from, to } = viewport2;
     let contentWidth = this.view.contentDOM.clientWidth;
     let isWider = contentWidth > Math.max(this.view.scrollDOM.clientWidth, this.minWidth) + 1;
     let widest = -1, ltr = this.view.textDirection == Direction.LTR;
@@ -13940,11 +14007,11 @@ var ViewState = class {
       this.scrollAnchorPos = -1;
       this.scrollAnchorHeight = prevHeight;
     }
-    let viewport = heightChanges.length ? this.mapViewport(this.viewport, update.changes) : this.viewport;
-    if (scrollTarget && (scrollTarget.range.head < viewport.from || scrollTarget.range.head > viewport.to) || !this.viewportIsAppropriate(viewport))
-      viewport = this.getViewport(0, scrollTarget);
-    let viewportChange = viewport.from != this.viewport.from || viewport.to != this.viewport.to;
-    this.viewport = viewport;
+    let viewport2 = heightChanges.length ? this.mapViewport(this.viewport, update.changes) : this.viewport;
+    if (scrollTarget && (scrollTarget.range.head < viewport2.from || scrollTarget.range.head > viewport2.to) || !this.viewportIsAppropriate(viewport2))
+      viewport2 = this.getViewport(0, scrollTarget);
+    let viewportChange = viewport2.from != this.viewport.from || viewport2.to != this.viewport.to;
+    this.viewport = viewport2;
     update.flags |= this.updateForViewport();
     if (viewportChange || !update.changes.empty || update.flags & 2)
       this.updateViewportLines();
@@ -14070,25 +14137,25 @@ var ViewState = class {
     let marginTop = 0.5 - Math.max(-0.5, Math.min(0.5, bias / 1e3 / 2));
     let map = this.heightMap, oracle = this.heightOracle;
     let { visibleTop, visibleBottom } = this;
-    let viewport = new Viewport(map.lineAt(visibleTop - marginTop * 1e3, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * 1e3, QueryType.ByHeight, oracle, 0, 0).to);
+    let viewport2 = new Viewport(map.lineAt(visibleTop - marginTop * 1e3, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(visibleBottom + (1 - marginTop) * 1e3, QueryType.ByHeight, oracle, 0, 0).to);
     if (scrollTarget) {
       let { head } = scrollTarget.range;
-      if (head < viewport.from || head > viewport.to) {
+      if (head < viewport2.from || head > viewport2.to) {
         let viewHeight = Math.min(this.editorHeight, this.pixelViewport.bottom - this.pixelViewport.top);
         let block = map.lineAt(head, QueryType.ByPos, oracle, 0, 0), topPos;
         if (scrollTarget.y == "center")
           topPos = (block.top + block.bottom) / 2 - viewHeight / 2;
-        else if (scrollTarget.y == "start" || scrollTarget.y == "nearest" && head < viewport.from)
+        else if (scrollTarget.y == "start" || scrollTarget.y == "nearest" && head < viewport2.from)
           topPos = block.top;
         else
           topPos = block.bottom - viewHeight;
-        viewport = new Viewport(map.lineAt(topPos - 1e3 / 2, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(topPos + viewHeight + 1e3 / 2, QueryType.ByHeight, oracle, 0, 0).to);
+        viewport2 = new Viewport(map.lineAt(topPos - 1e3 / 2, QueryType.ByHeight, oracle, 0, 0).from, map.lineAt(topPos + viewHeight + 1e3 / 2, QueryType.ByHeight, oracle, 0, 0).to);
       }
     }
-    return viewport;
+    return viewport2;
   }
-  mapViewport(viewport, changes) {
-    let from = changes.mapPos(viewport.from, -1), to = changes.mapPos(viewport.to, 1);
+  mapViewport(viewport2, changes) {
+    let from = changes.mapPos(viewport2.from, -1), to = changes.mapPos(viewport2.to, 1);
     return new Viewport(this.heightMap.lineAt(from, QueryType.ByPos, this.heightOracle, 0, 0).from, this.heightMap.lineAt(to, QueryType.ByPos, this.heightOracle, 0, 0).to);
   }
   // Checks if a given viewport covers the visible part of the
@@ -19630,13 +19697,13 @@ var DocInput = class {
 };
 var currentContext = null;
 var ParseContext = class _ParseContext {
-  constructor(parser, state, fragments = [], tree, treeLen, viewport, skipped, scheduleOn) {
+  constructor(parser, state, fragments = [], tree, treeLen, viewport2, skipped, scheduleOn) {
     this.parser = parser;
     this.state = state;
     this.fragments = fragments;
     this.tree = tree;
     this.treeLen = treeLen;
-    this.viewport = viewport;
+    this.viewport = viewport2;
     this.skipped = skipped;
     this.scheduleOn = scheduleOn;
     this.parse = null;
@@ -19645,8 +19712,8 @@ var ParseContext = class _ParseContext {
   /**
   @internal
   */
-  static create(parser, state, viewport) {
-    return new _ParseContext(parser, state, [], Tree.empty, 0, viewport, [], null);
+  static create(parser, state, viewport2) {
+    return new _ParseContext(parser, state, [], Tree.empty, 0, viewport2, [], null);
   }
   startParse() {
     return this.parser.startParse(new DocInput(this.state.doc), this.fragments);
@@ -19724,7 +19791,7 @@ var ParseContext = class _ParseContext {
   @internal
   */
   changes(changes, newState) {
-    let { fragments, tree, treeLen, viewport, skipped } = this;
+    let { fragments, tree, treeLen, viewport: viewport2, skipped } = this;
     this.takeTree();
     if (!changes.empty) {
       let ranges = [];
@@ -19732,7 +19799,7 @@ var ParseContext = class _ParseContext {
       fragments = TreeFragment.applyChanges(fragments, ranges);
       tree = Tree.empty;
       treeLen = 0;
-      viewport = { from: changes.mapPos(viewport.from, -1), to: changes.mapPos(viewport.to, 1) };
+      viewport2 = { from: changes.mapPos(viewport2.from, -1), to: changes.mapPos(viewport2.to, 1) };
       if (this.skipped.length) {
         skipped = [];
         for (let r of this.skipped) {
@@ -19742,19 +19809,19 @@ var ParseContext = class _ParseContext {
         }
       }
     }
-    return new _ParseContext(this.parser, newState, fragments, tree, treeLen, viewport, skipped, this.scheduleOn);
+    return new _ParseContext(this.parser, newState, fragments, tree, treeLen, viewport2, skipped, this.scheduleOn);
   }
   /**
   @internal
   */
-  updateViewport(viewport) {
-    if (this.viewport.from == viewport.from && this.viewport.to == viewport.to)
+  updateViewport(viewport2) {
+    if (this.viewport.from == viewport2.from && this.viewport.to == viewport2.to)
       return false;
-    this.viewport = viewport;
+    this.viewport = viewport2;
     let startLen = this.skipped.length;
     for (let i2 = 0; i2 < this.skipped.length; i2++) {
       let { from, to } = this.skipped[i2];
-      if (from < viewport.to && to > viewport.from) {
+      if (from < viewport2.to && to > viewport2.from) {
         this.fragments = cutFragments(this.fragments, from, to);
         this.skipped.splice(i2--, 1);
       }

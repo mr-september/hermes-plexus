@@ -2,57 +2,49 @@
 
 # Plexus
 
-Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). One workspace tab holds a file tree, a force-directed graph of your notes and their `[[wikilinks]]`, and a tabbed editor; drag the divider to fold either side away. Notes are read and written on your own machine, with no backend and no network (images that notes link from the web load only if you turn that on). Unofficial: not affiliated with Nous Research or Obsidian.
+Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-agent.nousresearch.com). A graph of your notes and their `[[wikilinks]]`, a file tree and a tabbed editor, together in one tab. Fully local; your notes stay on your machine. Unofficial: not affiliated with Nous Research or Obsidian.
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Hermes Desktop](https://img.shields.io/badge/Hermes%20Desktop-%E2%89%A50.21.5-6c5ce7.svg)](https://hermes-agent.nousresearch.com)
-[![Local only](https://img.shields.io/badge/Data-local%20only-0ea5e9.svg)](#what-it-reads-and-writes)
-[![Catalog check](https://img.shields.io/badge/hermes%20plugins%20validate-passing-brightgreen.svg)](#build-notes)
+[![Local only](https://img.shields.io/badge/Data-local%20only-0ea5e9.svg)](#privacy)
 
-**Graph, tree and editor in one tab** · **Obsidian-style wikilinks** · **Link notes from chat**
-
-### [Quick start](#install)
-
-<a href="#install">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.png">
-    <img src="docs/screenshots/overview-light.png" alt="A note graph coloured by folder, with the file tree on the left, rendered from the fictional demo vault" width="900">
-  </picture>
-</a>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-dark.png">
+  <img src="docs/screenshots/hero-light.png" alt="A graph of 3,000 notes in fourteen folders, each folder a colour, rendered from a generated demo vault" width="900">
+</picture>
 
 </div>
 
 ---
 
-## What it does
+## Features
 
-- **A graph of your vault.** Notes are nodes and `[[wikilinks]]` are edges, clustered and coloured by top-level folder. Scroll to zoom, drag to pan or move a node, click to open, Shift+click to pin. The filter box dims everything that does not match (`#tag` works too), the target button shows just the open note and its neighbours, and the legend hides whole folders. Edges are drawn by where their two notes sit: links inside a folder are tinted with its colour, links within a top-level folder are lighter, and links between top-level folders are faint and neutral, so structure reads before the web of cross-links; a note's own links light up on hover or selection, and the link button in the graph toolbar hides edges altogether. Notes changed by something else, such as the agent, get a dashed halo for ten minutes.
-- **Nested folder regions (opt-in).** Pick **Nested** in the Free / Folders / Nested control at the top of the graph (or set **Graph layout** to *Nested folder regions* in settings) and every folder becomes a translucent disc inside its parent, with its notes inside it; the map is laid out once from the whole vault, so filters, search and the local graph never move it. A folder's own notes float among its subfolders' discs rather than in a disc of their own, spread through the space with the best-connected notes nearest the middle. Click a region's label to zoom to that folder (the same gesture at every depth), click a step of the path at the bottom or press Escape to go back out, and scroll or drag as usual. A note cannot be dragged out of its own folder's region; that is the price of the guarantee that no note ever straddles another folder. Chains of folders with no notes and one child draw as one region (`A/B/C`). Frame a folder and press **Hide** in the path bar (or **H** on the graph) to take its whole subtree out of the graph: its region stays where it is, drawn dashed and marked "(hidden)", so you can still frame it, and each saved hidden path has a recovery control in the legend: top-level paths stay on their existing chips; deeper and stale paths appear under **Hidden** with subtree totals for current paths. Showing a path removes only that entry, so overlapping hidden paths can still exclude notes. **Show all** clears graph-hidden paths; other filters still apply. Hiding a folder inside an already hidden one changes nothing. **Note labels** controls note text; folder labels remain available for navigation, and framing honours the system reduced-motion preference.
-- **A file tree you can hide.** `.md` notes by folder, with new, rename, move to trash (recoverable) and drag-to-move. Moving or renaming rewrites the links that pointed at the note, keeping aliases, headings and embeds.
-- **A tabbed editor beside the graph.** Markdown source with autosave, `[[` autocomplete, Ctrl/⌘-click to follow a link (a missing target is created next to the current note), an Edit/Preview toggle and a backlinks list. The divider between graph and editor snaps to 0% or 100%, so either side can vanish.
-- **Real wikilinks.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` jump to the heading or block. Preview shows vault images (`![[pic.png|300]]`, `![alt](img/pic.png)`) and embeds a note or one of its sections (`![[Note#Heading]]`).
-- **Safe saves.** If a note changes on disk while you have unsaved edits, saving is refused until you choose **Reload from disk** or **Overwrite**. A clean open note simply reloads.
-- **Remembers where you were.** Open tabs, expanded folders, pinned nodes and the graph layout are kept per vault, with a switcher for several vaults.
+- **Graph.** Notes are nodes, wikilinks are edges, and each top-level folder gets its own colour. Scroll to zoom, drag to pan or move a note, click to open, Shift+click to pin. The filter box dims what does not match (`#tag` works too), the target button shows only the open note and its neighbours, and the legend hides whole folders.
+- **Nested folders.** Switch the layout to **Nested** and every folder becomes a region inside its parent, with its notes inside it. Click a folder's name to zoom in, press Escape to zoom out, and press **H** to hide a folder you do not want in the picture.
+- **File tree.** Create, rename, move and trash notes. Renaming or moving a note updates the links that point to it.
+- **Editor.** Markdown with autosave, `[[` completion, Ctrl/⌘-click to follow a link, an Edit/Preview toggle and a backlinks list. Drag the divider to give the graph or the editor the whole tab.
+- **Wikilinks.** `[[Note]]`, `[[Note#Heading]]` and `[[Note#^block]]` jump to the right place; Preview shows images and embedded notes.
+- **Safe saves.** If a note changes on disk while you have unsaved edits, Plexus asks whether to reload or overwrite instead of silently choosing.
+- **Remembers where you were.** Open tabs, expanded folders, pinned notes and the graph layout are kept per vault, and you can switch between vaults.
 
 <div align="center">
 <table>
   <tr>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/editor-dark.png">
-        <img src="docs/screenshots/editor-light.png" alt="A note open in the editor beside the graph, with its neighbours highlighted">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-nested-dark.png">
+        <img src="docs/screenshots/hero-nested-light.png" alt="Nested folder regions on a generated vault of 3,000 notes">
       </picture>
     </td>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/preview-dark.png">
-        <img src="docs/screenshots/preview-light.png" alt="Preview showing an embedded image and wikilinks">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/editor-dark.png">
+        <img src="docs/screenshots/editor-light.png" alt="A note open in the editor beside the graph, with its neighbours highlighted">
       </picture>
     </td>
   </tr>
   <tr>
-    <td align="center"><sub>Editor beside the graph. The open note and its neighbours light up.</sub></td>
-    <td align="center"><sub>Preview with an image, links and backlinks.</sub></td>
+    <td align="center"><sub>Nested folders: every folder a region inside its parent.</sub></td>
+    <td align="center"><sub>Editor beside the graph; the open note and its neighbours light up.</sub></td>
   </tr>
   <tr>
     <td width="50%">
@@ -63,112 +55,58 @@ Your markdown vault as a constellation, inside [Hermes Desktop](https://hermes-a
     </td>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/local-graph-dark.png">
-        <img src="docs/screenshots/local-graph-light.png" alt="Local graph of one note and the notes it links to">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/preview-dark.png">
+        <img src="docs/screenshots/preview-light.png" alt="Preview showing an embedded image and wikilinks">
       </picture>
     </td>
   </tr>
   <tr>
     <td align="center"><sub>Filtering by <code>#sensors</code> dims the rest.</sub></td>
-    <td align="center"><sub>Local graph: one note and its neighbours.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/nested-folders-dark.png">
-        <img src="docs/screenshots/nested-folders-light.png" alt="Nested folder regions: each folder a disc inside its parent, with its notes inside it, on a generated multi-level vault">
-      </picture>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hidden-folders-dark.png">
-        <img src="docs/screenshots/hidden-folders-light.png" alt="Hidden subtrees keep their dashed regions; the legend provides recovery controls for deeper and stale paths">
-      </picture>
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Nested folder regions (generated vault).</sub></td>
-    <td align="center"><sub>Hidden subtrees and recovery controls (generated vault).</sub></td>
+    <td align="center"><sub>Preview with an image, links and backlinks.</sub></td>
   </tr>
 </table>
 </div>
 
-These are rendered from the **fictional demo vault** in `demo/vault` (a made-up tide-pool research project; every name and result is invented) by a small harness that mounts the real plugin components in headless Edge or Chrome. Only the host app around them (Hermes' SDK, theme colours, the markdown renderer) is simulated, so treat them as representative rather than literal Hermes Desktop captures.
-
-## Use it from Hermes
-
-Open it from the **Vault** button in the status bar (right-click the bar to hide it), the command palette (**Open Vault**), or **Ctrl/⌘+Shift+G** (rebindable in Hermes settings). The first time, choose the folder that holds your notes. Settings are under **Settings → Plugins → Plexus**.
-
-**Link notes from chat.** The plugin registers a transcript directive, so the agent can point at a note and you open it with one click:
-
-```
-::vault{note="Projects/Hermes setup#Install"}
-```
-
-The chip opens or re-fronts the tab on that note. A name that does not exist is reported, never created. Hermes' agent only uses the directive if you tell it; add something like this to a skill or `SOUL.md`:
-
-> When you mention a note from the user's Obsidian vault, link it with `::vault{note="<Folder/Note name>"}` (optionally `#Heading`) on its own line instead of pasting its path.
-
-**Add a note to chat.** The note pane's **Add to chat** button inserts `@file:<path>` into the composer.
-
-## What it reads and writes
-
-| What | Where |
-|---|---|
-| Your notes (`.md`) and images used by Preview | Read and written inside the one vault folder you pick, through the desktop app's folder-scoped file API (`ctx.files`). Hermes enforces the boundary: nothing outside that folder is reachable, and the grant is listed (and revocable) under Capabilities → Plugins → Folder access. Edits are written back as UTF-8 text. Deleting moves a note to the OS trash. |
-| Settings, open tabs, graph layout | Hermes plugin storage on this machine, keyed per vault. |
-| Network | None by default. There is no backend, REST route or agent tool. The one exception is opt-in: images that a note links from the web (`![](https://…)`, including reference-style links) show as a placeholder in Preview, and load only after you click **Load remote images** (or tick it in Settings → Plugins → Vault). Loading one tells its host your IP address and when you opened the note. Raw HTML in notes is shown as text while the setting is off. |
-| Dotted folders (`.obsidian`, `.git`) and skipped folders (`archive`, `_archived` by default) | Not scanned. |
+The screenshots come from fictional demo vaults (a made-up tide-pool research project and generated ones), rendered by a small harness that runs the real plugin outside Hermes. Treat them as representative rather than literal captures.
 
 ## Install
 
-Copy `desktop/plugin.js` to `<HERMES_HOME>/desktop-plugins/hermes-plexus/plugin.js` (the folder name must equal the plugin id), or from a checkout:
+Install **Plexus** from Hermes Desktop's plugin marketplace (**Settings → Plugins**). Then open it from the **Vault** button in the status bar, the command palette (**Open Vault**) or **Ctrl/⌘+Shift+G**, and choose the folder that holds your notes. Plexus settings are under **Settings → Plugins → Plexus**.
 
-```
-npm install
-npm run deploy      # builds, then copies into <HERMES_HOME>/desktop-plugins/hermes-plexus/
-```
+To look around without your own notes, choose the `demo/vault` folder from this repository.
 
-Hermes watches that folder and hot-reloads the plugin on every save, so the desktop app needs no rebuild. It needs a Hermes Desktop release that provides `ctx.files` (folder-scoped file access; first released after v0.22.5).
+## Using it with the agent
 
-To try it without your own notes, choose `demo/vault` as the vault folder (or recreate it with `node demo/make-vault.mjs`).
+**Link notes from chat.** Add a line like this to a skill or `SOUL.md` and the agent can point at a note; you open it with one click:
 
-## Develop
+> When you mention a note from the user's Obsidian vault, link it with `::vault{note="<Folder/Note name>"}` (optionally `#Heading`) on its own line instead of pasting its path.
 
-```
-npm test                          # builds desktop/plugin.js, then unit, component and bundle smoke tests
-npm run verify                    # what CI runs: typecheck, tests, and that the committed bundle matches the sources
-npm run typecheck
-node scripts/screenshots.mjs      # re-renders docs/screenshots from the demo vault
-node scripts/bench.mjs            # layout cost and boundary crowding (add `paint` for canvas paint cost in headless Edge/Chrome)
-```
+A note that does not exist is reported, never created.
 
-```
-src/                  the plugin: model.ts (links, tags, graph, rewriting), store.ts (scanning, tabs, file
-                      operations), vault-fs.ts (the disk door), files.ts (the `ctx.files` adapter), graph-view.tsx, regions.ts (nested folder geometry), layout.ts (forces and note containment), edges.ts (edge classes and culling), hidden.ts (hidden-subtree path rules), camera.ts (framing and zoom limits), editor.tsx, preview.tsx, …
-desktop/plugin.js     the built bundle Hermes loads (committed)
-demo/                 fictional demo vault and the screenshot harness
-docs/screenshots/     README images
-scripts/              build.mjs, deploy.mjs, screenshots.mjs, bench.mjs
-test/                 in-memory disk, stub SDK, bundle smoke test
-plugin.yaml           catalog manifest
-```
+**Add a note to chat.** The note pane's **Add to chat** button puts a reference to the note in the composer.
 
-`model.ts`, `store.ts` and `vault-fs.ts` are framework-free and tested against an in-memory disk (`test/fake-disk.ts`). `test/bundle.test.tsx` loads the **built** file against a stub SDK. Set `PLEXUS_EVAL="<js>"` when running the screenshot script to print an expression evaluated in the settled page, which helps when debugging a layout.
+## Privacy
+
+Plexus only reads and writes inside the vault folder you choose, which Hermes lists (and lets you revoke) under its folder-access settings. Deleting moves a note to the system trash. Settings, open tabs and graph layout are stored by Hermes on your machine. Nothing is sent anywhere; the one opt-in exception is images that a note links from the web, which stay as placeholders until you click **Load remote images** (that tells the image's host your IP address). Folders starting with a dot (`.obsidian`, `.git`) and `archive`/`_archived` are skipped by default.
 
 ## Known limits
 
-- No live file watching: the vault rescans when the window regains focus (a full re-read up to 1,500 notes, folder listing only above that), after saves, and on the rescan button.
-- A save is check-then-write. `ctx.files` has no compare-and-swap, so an edit made by another program in the few milliseconds between the check and the write can be lost.
-- A note larger than 4 MiB (the file API's read limit) or not UTF-8 text cannot be opened. A vault with a symlink loop is scanned to 32 levels deep, and the workspace shows a warning. Images are shown in Preview only; other attachments (PDFs, audio) are not handled. Embedded notes render two levels deep.
-- The editor's highlighting is regex-based, not a full markdown parser.
-- UI strings are English only; add a locale object in `src/i18n.ts`.
+- No live file watching: the vault refreshes when the window regains focus, after saves, and with the rescan button.
+- A note that is not UTF-8 text or is larger than 4 MiB cannot be opened. Images show in Preview only; other attachments (PDFs, audio) are not handled.
+- If another program edits a note in the instant between Plexus checking it and saving it, that edit can be lost.
+- The editor's highlighting is simple, and the interface is English only.
 
-## Build notes
+## Development
 
-`desktop/plugin.js` is the **built** bundle and is committed, because that is the file Hermes installs and loads (`hermes plugins validate .` checks it). Rebuild it with `npm run build` after changing `src/`; `npm test` rebuilds it first.
+```
+npm install
+npm run verify                    # typecheck, tests, and a check that the committed bundle matches the sources
+npm run deploy                    # build and install into your local Hermes (for trying changes)
+node scripts/screenshots.mjs      # re-render docs/screenshots from the demo vaults
+node scripts/bench.mjs            # layout cost and boundary crowding
+```
 
-The build omits CodeMirror's optional `EditorState.tree` debugging getter, which mutates a prototype and fails Hermes admission lint. It retains the normal `syntaxTree(state)` API and does not modify installed dependency files. The exact-source transform fails the build if that upstream code changes, requiring review on a dependency update.
+`desktop/plugin.js` is the built bundle Hermes loads; it is committed and rebuilt by `npm run build`. Design notes are in [docs/](docs).
 
 <div align="center">
 

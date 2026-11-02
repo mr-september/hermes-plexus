@@ -321,7 +321,7 @@ export function sameGraph(a: VaultGraph, b: VaultGraph): boolean {
 /** Drawn (and collision) radius of a note: grows with its degree. */
 export const radiusOf = (node: Pick<GraphNode, 'degree'>): number => 3 + Math.sqrt(node.degree) * 1.7
 
-export const backlinksOf =(graph: VaultGraph, rel: string): string[] =>
+export const backlinksOf = (graph: VaultGraph, rel: string): string[] =>
   graph.edges.filter(edge => edge.target === rel).map(edge => edge.source)
 
 /** The notes a given note links to or is linked from, within `depth` hops (the note itself included). */

@@ -1,26 +1,17 @@
 import type { Simulation } from 'd3-force'
-import { type DrawnEdge, drawnEdges, segmentInView } from './edges'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
 
 import { clampScale, frameDisc, type View, zoomLimits, zoomPath } from './camera'
+import { type DrawnEdge, drawnEdges } from './edges'
+import { adjacencyOf, hopTarget, nestedOffsets, occupiedRegions, seedNodes } from './graph-nodes'
+import { type Box, hsl, type LabelBox, paintEdges, paintNodes, paintNoteLabels, paintRegions, REGION_MIN_PX, type Scene } from './graph-paint'
 import { HiddenControls } from './hidden-controls'
-import { coveringEntry, isHiddenDir, subtreeCount } from './hidden'
+import { coveringEntry, subtreeCount } from './hidden'
 import { PLUGIN_ID } from './i18n'
-import {
-  clampToDisc,
-  containAll,
-  createSimulation,
-  folderAnchors,
-  fromOffset,
-  type Offset,
-  seedInCompartment,
-  type SimLink,
-  type SimNode,
-  toOffset
-} from './layout'
-import { folderHues, matchesSearch, radiusOf, type VaultGraph } from './model'
+import { clampToDisc, containAll, createSimulation, folderAnchors, type Offset, type SimLink, type SimNode } from './layout'
+import { folderHues, radiusOf, type VaultGraph } from './model'
 import type { ClusterMode, LabelMode } from './prefs'
 import {
   buildGeometry,
@@ -35,37 +26,10 @@ import {
   regionOfDir
 } from './regions'
 
-/** Notes changed by something else stay highlighted this long. */
-const TOUCHED_MS = 10 * 60 * 1000
-
-/** A region is drawn (and can be hit) once its on-screen radius reaches this, and its label once it reaches the second. */
-const REGION_MIN_PX = 14
-const LABEL_MIN_PX = 20
-/**
- * Region labels are 11px, shrinking with the region to this floor. A label that does not fit the crescent above the
- * content (which needs a region of about 60px radius for 11px text) is drawn at the floor, haloed, over the
- * region's top instead — from LABEL_MIN_PX up, where the notes beneath are a few pixels each.
- */
-const LABEL_COMPACT_PX = 9
 /** The camera "is in" a region once the region's on-screen radius reaches this fraction of the viewport's short side. */
 const CURRENT_FRACTION = 0.25
 /** The global Fit action never magnifies past this; framing a folder is not capped. */
 const FIT_CAP = 1.8
-
-const fontOf = (px: number, weight: 400 | 600): string => `${weight} ${px}px "Segoe UI", system-ui, -apple-system, sans-serif`
-
-const hsl = (hue: number, lightness: number): string => `hsl(${hue} 62% ${lightness}%)`
-
-/** Whether the box lies wholly outside the disc grown by `margin`. */
-const rectClearOf = (box: readonly [number, number, number, number], disc: { r: number; x: number; y: number }, margin: number): boolean =>
-  Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin
-
-/** Stroke alpha of each edge class in the nested layout; the across class is the faintest, so structure reads first. */
-const EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 } as const
-/** Paint order, faintest first. */
-const EDGE_ORDER = ['flat', 'across', 'top', 'compartment'] as const
-/** Non-incident edges keep this share of their strength while a note is focused. */
-const EDGE_RECEDE = 0.25
 
 export interface GraphViewProps {
   cluster: ClusterMode
@@ -107,11 +71,6 @@ export interface GraphViewProps {
   touched: Record<string, number>
 }
 
-interface LabelBox {
-  box: [number, number, number, number]
-  id: string
-}
-
 export function GraphView(props: GraphViewProps) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props
   const nested = cluster === 'nested'
@@ -121,6 +80,7 @@ export function GraphView(props: GraphViewProps) {
   const simRef = useRef<null | Simulation<SimNode, SimLink>>(null)
   const nodesRef = useRef<SimNode[]>([])
   const linksRef = useRef<SimLink[]>([])
+  const adjacencyRef = useRef<Map<string, string[]>>(new Map())
   const edgesRef = useRef<DrawnEdge<SimNode>[]>([])
   const viewRef = useRef<View>({ k: 1, x: 0, y: 0 })
   const sizeRef = useRef({ h: 0, w: 0 })
@@ -211,190 +171,6 @@ export function GraphView(props: GraphViewProps) {
     }
   }
 
-  const paintRegions = (ctx: CanvasRenderingContext2D, ink: string, labelPlaced: [number, number, number, number][]) => {
-    // The first opaque background above the canvas, so a haloed label cuts a clean edge in any theme.
-    let haloColor: null | string = null
-
-    const halo = (): string => {
-      if (haloColor === null) {
-        haloColor = 'rgba(0, 0, 0, 0.55)'
-
-        for (let el: Element | null = canvasRef.current; el; el = el.parentElement) {
-          const bg = getComputedStyle(el).backgroundColor
-
-          if (bg && !/^rgba?(.*,s*0)$|^transparent$/.test(bg)) {
-            haloColor = bg
-            break
-          }
-        }
-      }
-
-      return haloColor
-    }
-
-    const geo = geometryRef.current
-    const { h, w } = sizeRef.current
-    const { k, x, y } = viewRef.current
-    const root = geo.root === null ? undefined : geo.regions.get(geo.root)
-    const left = -x / k
-    const top = -y / k
-    const right = (w - x) / k
-    const bottom = (h - y) / k
-    const focusId = hoverRegionRef.current
-    const chain = new Set(focusId === null ? [] : regionChain(geo, focusId).map(region => region.id))
-    const fontPx = 11 / k
-
-    labelBoxesRef.current = []
-    ctx.font = fontOf(fontPx, 600)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-
-    const disc = (
-      cx: number,
-      cy: number,
-      r: number,
-      hue: number,
-      depth: number,
-      lit: boolean,
-      empty: boolean,
-      own: boolean,
-      dashed: boolean
-    ) => {
-      const recede = focusId !== null && !lit
-      const faint = empty ? 0.35 : 1
-
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.globalAlpha = (own ? 0.05 : 0.16 / (1 + 0.45 * depth)) * (lit ? 1.7 : recede ? 0.45 : 1) * faint
-      ctx.fillStyle = hsl(hue, Math.min(72, 50 + 4 * depth))
-      ctx.fill()
-      // A hidden region's dashed outline keeps full strength so it stays readable while its fill is faint.
-      ctx.globalAlpha = (lit ? 0.85 : recede ? 0.12 : 0.32) * (dashed ? 1 : faint)
-      ctx.strokeStyle = hsl(hue, Math.min(72, 54 + 4 * depth))
-      ctx.lineWidth = (lit ? 1.8 : 1) / k
-
-      if (dashed) {
-        ctx.setLineDash([5 / k, 4 / k])
-      }
-
-      ctx.stroke()
-
-      if (dashed) {
-        ctx.setLineDash([])
-      }
-    }
-
-    // A region whose children are not drawn yet is a plain disc; labels need room to be legible.
-    const visit = (region: Region) => {
-      const s = region.r * k
-
-      if (
-        s < REGION_MIN_PX ||
-        region.x + region.r < left ||
-        region.x - region.r > right ||
-        region.y + region.r < top ||
-        region.y - region.r > bottom
-      ) {
-        return
-      }
-
-      const hue = colorOf(region.top)
-      const lit = chain.has(region.id)
-      const covers = [
-        [left, top],
-        [right, top],
-        [left, bottom],
-        [right, bottom]
-      ].every(([px, py]) => Math.hypot(px! - region.x, py! - region.y) < region.r)
-
-      // Above the band (the region has outgrown the viewport) only the outline — which is off screen — remains.
-      // The vault root stays in the geometry (it holds the packing together and anchors the camera fits and
-      // the breadcrumb) but is not drawn: its disc is only the enclosure of the top-level folders.
-      const hiddenSet = live.current.hiddenFolders
-      // A region is hidden by saved path coverage (its own entry or an ancestor's), not by having no shown note.
-      const hidden = region.id !== '' && isHiddenDir(hiddenSet, region.id)
-
-      if (!covers && region.id !== '') {
-        disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false, hidden)
-      }
-
-      const comp = region.compartment
-
-      // A folder's own notes float among its subfolders' discs: their compartment is a packing device, not a drawn
-      // container. Only the vault root's, when its notes are hidden, is outlined (dashed), as the sign of that.
-      if (comp && region.id === '' && hiddenSet.has('') && region.children.length && comp.r * k >= REGION_MIN_PX) {
-        disc(
-          comp.x,
-          comp.y,
-          comp.r,
-          hue,
-          region.depth + 1,
-          lit,
-          !occupiedRef.current.has(region.id),
-          true,
-          true
-        )
-      }
-
-      const forced = region.id === focusId || region.id === currentRef.current
-
-      if (region.label && !covers && (s >= LABEL_MIN_PX || forced)) {
-        const text = hidden ? `${region.label} ${t('graph.hiddenSuffix')}` : region.label
-
-        // Where `text` sits at `px` screen pixels: in the top of the region, as high as the circle's curve allows.
-        const lay = (px: number) => {
-          ctx.font = fontOf(px / k, 600)
-
-          const width = ctx.measureText(text).width
-          const half = width / 2 + 3 / k
-          const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r
-          const top = region.y - region.r + Math.max(3 / k, room)
-
-          return { box: [region.x - width / 2, top, region.x + width / 2, top + (px / k) * 1.15] as [number, number, number, number], room, width }
-        }
-
-        const taken = (box: readonly number[]) => labelPlaced.some(p => box[0]! < p[2] && box[2]! > p[0] && box[1]! < p[3] && box[3]! > p[1])
-        // The crescent above the content disc holds no note or child region, so a label that fits there is drawn
-        // as it is. The text shrinks with the region before it gives up on the crescent.
-        const sized = lay(Math.min(11, Math.max(LABEL_COMPACT_PX, s / 5)))
-        const clear = sized.room < region.r && rectClearOf(sized.box, region.content, 2 / k)
-        const overlay = forced || clear ? null : lay(LABEL_COMPACT_PX)
-        const spot = forced || clear ? sized : overlay && overlay.width <= 1.5 * region.r ? overlay : null
-
-        if (spot && (forced || !taken(spot.box))) {
-          const { box } = spot
-
-          labelPlaced.push(box)
-          labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id })
-          ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85
-
-          if (spot === overlay) {
-            ctx.lineJoin = 'round'
-            ctx.lineWidth = 3 / k
-            ctx.strokeStyle = halo()
-            ctx.strokeText(text, region.x, box[1])
-          }
-
-          ctx.fillStyle = ink
-          ctx.fillText(text, region.x, box[1])
-        }
-
-        ctx.font = fontOf(fontPx, 600)
-      }
-
-      for (const id of region.children) {
-        visit(geo.regions.get(id)!)
-      }
-    }
-
-    if (root) {
-      visit(root)
-    }
-
-    ctx.globalAlpha = 1
-    ctx.lineWidth = 1 / k
-  }
-
   const paint = () => {
     const canvas = canvasRef.current
 
@@ -409,32 +185,40 @@ export function GraphView(props: GraphViewProps) {
     }
 
     const started = live.current.onPaintTime ? performance.now() : 0
-    const { openRels, pinned, search, selected: current, touched, labels: labelMode } = live.current
+    const { edges, hiddenFolders: hidden, labels: labelMode, openRels, pinned, search, selected: current, tierEdges, touched } = live.current
     const dpr = window.devicePixelRatio || 1
     const { h, w } = sizeRef.current
     const { k, x, y } = viewRef.current
     const style = getComputedStyle(canvas)
-    const ink = style.getPropertyValue('--ui-text-secondary').trim() || '#888'
-    const muted = style.getPropertyValue('--ui-stroke-secondary').trim() || '#8885'
-    const accent = style.getPropertyValue('--ui-accent').trim() || '#4a9eff'
     const focus = hoverRef.current ?? cursorRef.current ?? current
-    const near = new Set<string>()
-    const searching = search.trim().length > 0
-    const now = Date.now()
 
-    if (focus) {
-      near.add(focus)
-
-      for (const link of linksRef.current) {
-        const s = (link.source as SimNode).id
-        const target = (link.target as SimNode).id
-
-        if (s === focus) {
-          near.add(target)
-        } else if (target === focus) {
-          near.add(s)
-        }
-      }
+    const scene: Scene = {
+      accent: style.getPropertyValue('--ui-accent').trim() || '#4a9eff',
+      canvas,
+      currentRegion: currentRef.current,
+      edges: edgesRef.current,
+      edgesOn: edges !== false,
+      focus,
+      geometry: geometryRef.current,
+      hiddenFolders: hidden,
+      hiddenSuffix: t('graph.hiddenSuffix'),
+      hoverRegion: hoverRegionRef.current,
+      hueOf: colorOf,
+      ink: style.getPropertyValue('--ui-text-secondary').trim() || '#888',
+      labelMode,
+      muted: style.getPropertyValue('--ui-stroke-secondary').trim() || '#8885',
+      near: new Set(focus ? [focus, ...(adjacencyRef.current.get(focus) ?? [])] : []),
+      nested,
+      nodes: nodesRef.current,
+      occupied: occupiedRef.current,
+      openRels,
+      pinned,
+      search,
+      selected: current,
+      size: sizeRef.current,
+      tierEdges: tierEdges !== false,
+      touched,
+      view: viewRef.current
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -444,152 +228,16 @@ export function GraphView(props: GraphViewProps) {
     ctx.lineWidth = 1 / k
 
     // Region labels are placed before note labels, so notes yield to them.
-    const placed: [number, number, number, number][] = []
+    const placed: Box[] = []
 
-    if (nested) {
-      paintRegions(ctx, ink, placed)
+    labelBoxesRef.current = nested ? paintRegions(ctx, scene, placed) : []
+
+    if (scene.edgesOn) {
+      paintEdges(ctx, scene)
     }
 
-    if (live.current.edges !== false) {
-      const tiered = live.current.tierEdges !== false
-      const view = { bottom: (h - y) / k, left: -x / k, right: (w - x) / k, top: -y / k }
-      const margin = 1 / k
-      const incident: DrawnEdge<SimNode>[] = []
-      const groups = new Map<string, { alpha: number; color: string; edges: DrawnEdge<SimNode>[]; rank: number }>()
-
-      for (const edge of edgesRef.current) {
-        if (!segmentInView(edge.source, edge.target, view, margin)) {
-          continue
-        }
-
-        if (focus !== null && (edge.source.id === focus || edge.target.id === focus)) {
-          incident.push(edge)
-
-          continue
-        }
-
-        // Untiered (the local graph): every edge alike, neutral. Tiered: by class, tinted unless across folders.
-        const hue = colorOf(edge.source.folder)
-        const cls = tiered ? edge.class : 'flat'
-        const key = cls === 'across' || cls === 'flat' ? cls : `${cls}:${hue}`
-        let group = groups.get(key)
-
-        if (!group) {
-          group = {
-            alpha: (cls === 'flat' ? 0.35 : EDGE_ALPHA[cls]) * (focus === null ? 1 : EDGE_RECEDE),
-            color: cls === 'across' || cls === 'flat' ? muted : hsl(hue, 58),
-            edges: [],
-            rank: EDGE_ORDER.indexOf(cls)
-          }
-          groups.set(key, group)
-        }
-
-        group.edges.push(edge)
-      }
-
-      const stroke = (edges: readonly DrawnEdge<SimNode>[], color: string, alpha: number) => {
-        ctx.globalAlpha = alpha
-        ctx.strokeStyle = color
-        ctx.beginPath()
-
-        for (const { source, target } of edges) {
-          ctx.moveTo(source.x, source.y)
-          ctx.lineTo(target.x, target.y)
-        }
-
-        ctx.stroke()
-      }
-
-      // Faintest class first, so the local structure is never painted over; the focused note's edges last.
-      for (const group of [...groups.values()].sort((p, q) => p.rank - q.rank)) {
-        stroke(group.edges, group.color, group.alpha)
-      }
-
-      stroke(incident, accent, 0.9)
-    }
-
-    for (const node of nodesRef.current) {
-      const dim = (focus !== null && !near.has(node.id)) || (searching && !matchesSearch(node, search))
-      const r = radiusOf(node)
-
-      ctx.globalAlpha = dim ? 0.16 : 1
-      ctx.fillStyle = hsl(colorOf(node.folder), 58)
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
-      ctx.fill()
-
-      const recent = now - (touched[node.id] ?? 0) < TOUCHED_MS && touched[node.id] !== undefined
-
-      if (recent) {
-        ctx.globalAlpha = dim ? 0.3 : 0.9
-        ctx.strokeStyle = accent
-        ctx.setLineDash([2 / k, 2 / k])
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, r + 6 / k, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.setLineDash([])
-      }
-
-      if (openRels.has(node.id) || node.id === current) {
-        ctx.globalAlpha = 1
-        ctx.strokeStyle = accent
-        ctx.lineWidth = 2 / k
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, r + 3 / k, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.lineWidth = 1 / k
-      }
-
-      if (pinned.has(node.id)) {
-        ctx.globalAlpha = dim ? 0.3 : 1
-        ctx.fillStyle = ink
-        ctx.fillRect(node.x - 1.5 / k, node.y - r - 5 / k, 3 / k, 3 / k)
-      }
-    }
-
-    // Labels. A canvas font cannot use CSS variables, so name the families outright; the size is
-    // divided by the zoom so the text stays ~11px on screen. Highest-priority labels are placed
-    // first and any that would overlap an already placed one are skipped, so a dense graph stays legible.
-    const fontPx = 11 / k
-
-    ctx.fillStyle = ink
-    ctx.font = fontOf(fontPx, 400)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-
-    const priority = (node: SimNode, matched: boolean): number =>
-      node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree
-
-    const candidates = nodesRef.current
-      .map(node => ({ matched: searching && matchesSearch(node, search), node }))
-      .filter(({ matched, node }) => {
-        if (labelMode === 'never') {
-          return node.id === focus
-        }
-
-        if (focus !== null && !near.has(node.id) && !matched) {
-          return false
-        }
-
-        return labelMode === 'always' || node.id === focus || near.has(node.id) || matched || node.degree >= 6 || k > 1.2
-      })
-      .sort((a, b) => priority(b.node, b.matched) - priority(a.node, a.matched))
-      .slice(0, 400)
-
-    for (const { matched, node } of candidates) {
-      const width = ctx.measureText(node.title).width
-      const left = node.x - width / 2
-      const top = node.y + radiusOf(node) + 2 / k
-      const box: [number, number, number, number] = [left, top, left + width, top + fontPx * 1.15]
-
-      if (node.id !== focus && placed.some(p => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
-        continue
-      }
-
-      placed.push(box)
-      ctx.globalAlpha = node.id === focus ? 1 : matched || near.has(node.id) ? 0.95 : 0.8
-      ctx.fillText(node.title, node.x, top)
-    }
+    paintNodes(ctx, scene)
+    paintNoteLabels(ctx, scene, placed)
 
     ctx.globalAlpha = 1
     live.current.onPaintTime?.(performance.now() - started)
@@ -686,12 +334,18 @@ export function GraphView(props: GraphViewProps) {
       return
     }
 
-    const xs = nodes.map(node => node.x)
-    const ys = nodes.map(node => node.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x)
+      maxX = Math.max(maxX, node.x)
+      minY = Math.min(minY, node.y)
+      maxY = Math.max(maxY, node.y)
+    }
+
     const pad = 48
     const k = Math.min((w - pad * 2) / Math.max(maxX - minX, 1), (h - pad * 2) / Math.max(maxY - minY, 1), FIT_CAP)
 
@@ -705,72 +359,18 @@ export function GraphView(props: GraphViewProps) {
     // Live positions are only meaningful under the layout they were produced by.
     const sameMode = previousLayout?.mode === cluster
     const previous = new Map(nodesRef.current.map(node => [node.id, node]))
-    const saved = live.current.positions
-    const savedNested = live.current.nestedPositions ?? {}
     const savedMode = live.current.positionsMode
-    const absoluteSaved = !nested && (savedMode === undefined || savedMode === cluster)
-    const pinnedNow = live.current.pinned
-    const anchors = folderAnchors(folders, cluster)
-    const perDir = new Map<string, number>()
 
-    for (const node of graph.nodes) {
-      perDir.set(node.dir, (perDir.get(node.dir) ?? 0) + 1)
-    }
-
-    const seen = new Map<string, number>()
-    let restored = 0
-
-    const nodes: SimNode[] = graph.nodes.map(node => {
-      const index = seen.get(node.dir) ?? 0
-
-      seen.set(node.dir, index + 1)
-
-      const comp = nested ? compartmentOf(geometry, node.dir) : undefined
-      const old = sameMode ? previous.get(node.id) : undefined
-      let known: undefined | { x: number; y: number }
-
-      if (nested) {
-        // Compartment-relative: carried through a repack by offset, then contained below.
-        const oldComp = old && previousLayout ? compartmentOf(previousLayout.geometry, old.dir) : undefined
-        const stored = savedNested[node.id]
-
-        if (comp && old && oldComp && old.dir === node.dir) {
-          const [x, y] = fromOffset(comp, (old.x - oldComp.x) / oldComp.r, (old.y - oldComp.y) / oldComp.r)
-
-          known = { x, y }
-        } else if (comp && !old && stored && stored[0] === node.dir) {
-          const [x, y] = fromOffset(comp, stored[1], stored[2])
-
-          known = { x, y }
-        }
-      } else if (old) {
-        known = old
-      } else if (absoluteSaved && saved[node.id]) {
-        known = { x: saved[node.id]![0], y: saved[node.id]![1] }
-      }
-
-      if (known) {
-        restored++
-      }
-
-      const anchor = anchors.get(node.folder) ?? { x: 0, y: 0 }
-
-      const placed: SimNode = {
-        ...node,
-        x: known?.x ?? anchor.x + (Math.random() - 0.5) * 40,
-        y: known?.y ?? anchor.y + (Math.random() - 0.5) * 40
-      }
-
-      if (comp && !known) {
-        seedInCompartment(placed, comp, index, perDir.get(node.dir) ?? 1)
-      }
-
-      if (pinnedNow.has(node.id)) {
-        placed.fx = placed.x
-        placed.fy = placed.y
-      }
-
-      return placed
+    const { nodes, restored } = seedNodes({
+      anchors: folderAnchors(folders, cluster),
+      cluster,
+      geometry,
+      graph,
+      nestedPositions: live.current.nestedPositions ?? {},
+      pinned: live.current.pinned,
+      previous: sameMode ? previous : new Map(),
+      previousGeometry: previousLayout?.geometry,
+      saved: !nested && (savedMode === undefined || savedMode === cluster) ? live.current.positions : undefined
     })
 
     // Whole-note containment before anything is painted: after seeding, restoring or remapping, and
@@ -793,21 +393,10 @@ export function GraphView(props: GraphViewProps) {
 
     nodesRef.current = nodes
     linksRef.current = links
+    adjacencyRef.current = adjacencyOf(links)
     edgesRef.current = drawnEdges(new Map(nodes.map(node => [node.id, node])), graph.edges)
+    occupiedRef.current = nested ? occupiedRegions(nodes, geometry) : new Set()
     simRef.current?.stop()
-
-    const occupied = new Set<string>()
-
-    if (nested) {
-      for (const node of nodes) {
-        for (let region = regionOfDir(geometry, node.dir); region && !occupied.has(region.id); ) {
-          occupied.add(region.id)
-          region = region.parent === null ? null : (geometry.regions.get(region.parent) ?? null)
-        }
-      }
-    }
-
-    occupiedRef.current = occupied
 
     // A mostly-restored layout only needs a gentle settle, not a full re-explosion.
     const warm = nodes.length > 0 && restored / nodes.length > 0.8
@@ -829,21 +418,7 @@ export function GraphView(props: GraphViewProps) {
         }
 
         if (nested) {
-          live.current.onNestedPositions?.(
-            Object.fromEntries(
-              nodesRef.current.flatMap(node => {
-                const comp = compartmentOf(geometry, node.dir)
-
-                if (!comp) {
-                  return []
-                }
-
-                const [dir, u, v] = toOffset(node, comp)
-
-                return [[node.id, [dir, Math.round(u * 1e4) / 1e4, Math.round(v * 1e4) / 1e4] as Offset]]
-              })
-            )
-          )
+          live.current.onNestedPositions?.(nestedOffsets(nodesRef.current, geometry))
         } else {
           live.current.onPositions(
             cluster as 'folder' | 'none',
@@ -1197,55 +772,21 @@ export function GraphView(props: GraphViewProps) {
     }
 
     const nodes = nodesRef.current
-    const byId = new Map(nodes.map(node => [node.id, node]))
-    const current = byId.get(cursorRef.current ?? selected ?? '') ?? [...nodes].sort((a, b) => b.degree - a.degree)[0]
+    const current = nodes.find(node => node.id === (cursorRef.current ?? selected ?? '')) ?? [...nodes].sort((a, b) => b.degree - a.degree)[0]
 
     if (!current) {
       return
-    }
-
-    const dir: Record<string, [number, number]> = {
-      ArrowDown: [0, 1],
-      ArrowLeft: [-1, 0],
-      ArrowRight: [1, 0],
-      ArrowUp: [0, -1]
     }
 
     if (event.key === 'Enter') {
       onOpen(current.id)
     } else if (event.key.toLowerCase() === 'p') {
       live.current.onTogglePin(current.id)
-    } else if (dir[event.key]) {
-      const [dx, dy] = dir[event.key]!
-      const linked = new Set<string>()
+    } else if (event.key.startsWith('Arrow')) {
+      const next = hopTarget(event.key, current, nodes, adjacencyRef.current)
 
-      for (const link of linksRef.current) {
-        const s = (link.source as SimNode).id
-        const target = (link.target as SimNode).id
-
-        if (s === current.id) {
-          linked.add(target)
-        } else if (target === current.id) {
-          linked.add(s)
-        }
-      }
-
-      const pool = (linked.size ? [...linked] : nodes.map(node => node.id)).map(id => byId.get(id)!).filter(Boolean)
-
-      const best = pool
-        .filter(node => node.id !== current.id)
-        .map(node => {
-          const vx = node.x - current.x
-          const vy = node.y - current.y
-          const len = Math.hypot(vx, vy) || 1
-
-          return { alignment: (vx * dx + vy * dy) / len, dist: len, node }
-        })
-        .filter(item => item.alignment > 0.3)
-        .sort((a, b) => b.alignment / (1 + b.dist / 200) - a.alignment / (1 + a.dist / 200))[0]
-
-      if (best) {
-        cursorRef.current = best.node.id
+      if (next) {
+        cursorRef.current = next.id
       }
     } else {
       return
