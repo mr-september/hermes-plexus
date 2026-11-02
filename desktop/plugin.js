@@ -3546,14 +3546,29 @@ var fromOffset = (compartment, u, v) => [
   compartment.y + v * compartment.r
 ];
 var NESTED_PULL = 0.25;
-var NESTED_REPULSION_RANGE = 110;
 var NESTED_LINK = 0.12;
 var NESTED_LINK_DISTANCE = 80;
 var NESTED_CHARGE = 250;
+var CHARGE_FULL_AT = 12;
 var HUB_PULL = 1.5;
-var CROSS_LINK = 0.03;
 var INSET_START = 0.8;
 var INSET_STRENGTH = 2;
+function forceCompartmentCharge(geometry, strength) {
+  let groups = [];
+  const force = (alpha) => groups.forEach((group) => group(alpha));
+  force.initialize = (nodes, random) => {
+    const byDir = /* @__PURE__ */ new Map();
+    for (const node of nodes) {
+      byDir.set(node.dir, [...byDir.get(node.dir) ?? [], node]);
+    }
+    groups = [...byDir].filter(([, members]) => members.length > 1).map(([dir, members]) => {
+      const many = manyBody_default().strength(-strength * Math.min(1, members.length / CHARGE_FULL_AT)).distanceMax(2 * (compartmentOf(geometry, dir)?.r ?? Infinity));
+      many.initialize(members, random);
+      return many;
+    });
+  };
+  return force;
+}
 function forceInset(geometry) {
   let nodes = [];
   const force = (alpha) => {
@@ -3577,6 +3592,11 @@ function forceInset(geometry) {
   force.initialize = (list) => void (nodes = list);
   return force;
 }
+function sameFolderLinks(nodes, links) {
+  const dirs = new Map(nodes.map((node) => [node.id, node.dir]));
+  const dirOf = (end) => dirs.get(typeof end === "object" ? end.id : String(end));
+  return links.filter((link) => dirOf(link.source) === dirOf(link.target));
+}
 function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
   const anchors = folderAnchors(folders, cluster);
   const nested = cluster === "nested";
@@ -3585,8 +3605,8 @@ function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
   const aim = (axis) => (node) => nested ? compartmentOf(geometry, node.dir)?.[axis] ?? 0 : anchors.get(node.folder)?.[axis] ?? 0;
   const sim = simulation_default(nodes).alpha(alpha).force(
     "link",
-    link_default(links).id((node) => node.id).distance(nested ? NESTED_LINK_DISTANCE : 48).strength((link) => nested && link.source.dir !== link.target.dir ? CROSS_LINK : nested ? NESTED_LINK : 0.3)
-  ).force("charge", manyBody_default().strength(nested ? -NESTED_CHARGE : -130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340)).force("collide", collide_default().radius((node) => radiusOf(node) + COLLIDE_PAD)).force("x", x_default2(aim("x")).strength(strength)).force("y", y_default2(aim("y")).strength(strength));
+    link_default(nested ? sameFolderLinks(nodes, links) : links).id((node) => node.id).distance(nested ? NESTED_LINK_DISTANCE : 48).strength(nested ? NESTED_LINK : 0.3)
+  ).force("charge", nested ? forceCompartmentCharge(geometry, NESTED_CHARGE) : manyBody_default().strength(-130).distanceMax(340)).force("collide", collide_default().radius((node) => radiusOf(node) + COLLIDE_PAD)).force("x", x_default2(aim("x")).strength(strength)).force("y", y_default2(aim("y")).strength(strength));
   return nested ? sim.force("inset", forceInset(geometry)) : sim;
 }
 

@@ -157,34 +157,66 @@ export interface LayoutSpec {
 }
 
 /*
- * Nested-mode tuning, from the boundary-crowding comparison in demo/bench.ts (600 notes, 300 steps; share of
- * notes in the outer 5% of a compartment). With the legacy 0.07 pull and 340 repulsion range, 61% of notes sat on
- * the rim with internal links only and 83% with no links at all: not cross-folder tension, but the repulsion pushing
- * outward against a weak pull. Shortening the range to 60 and pulling at 0.25 brings internal-only to 4% (and no-links
- * to 43%). Cross-folder links add a separate tension (65% at 70% cross-links). A second pass (live vault, notes hugging the
- * rim) found the cross-folder pull — proportional to a distance of hundreds — still beat the centring pull, and that plain
- * repulsion alone leaves 44% on the rim; so cross links are weakened to 0.03 and an inset spring eases notes off the rim
- * beyond half the usable radius (rim share 63% -> 10% at 70% cross-links, 27% -> 0% at 10%; mean radial fraction 0.5-0.6).
- * A third pass (live vault: notes clumped near the middle with the outer ring empty, hubs not central) widened the spacing:
- * weaker, longer intra-folder links (0.12 at 80), stronger and longer-ranged repulsion (250 within 110), the inset spring
- * starting at 0.8 of the usable radius, and a centring pull that grows with degree. On the bench's hub-and-spoke vault,
- * hubs sit at 0.38 of the compartment radius against 0.61 for the notes in the lower half by degree (0.45 vs 0.47 before),
- * and the mean radial fraction rises from 0.50 to 0.56 with 1% on the rim. Same force set, so the per-tick cost is unchanged.
+ * Nested-mode tuning, from the crowding comparisons in demo/bench.ts (settled notes, by compartment size and link
+ * locality). What moves a note inside its compartment, and why each force is there:
+ *  - repulsion, per compartment only (forceCompartmentCharge), weaker for folders of under a dozen notes: a global range let a neighbouring crowd push a small
+ *    folder's notes onto its wall (singletons 90% on the rim), and no one range suits both a 3-note and a 300-note folder;
+ *  - intra-folder links only (sameFolderLinks): a cross-folder link is a spring over hundreds of units, which beats
+ *    every centring force whatever the compartment's size, so it parked notes on the wall facing their partner;
+ *  - a linear pull to the centre, stronger for hubs, so well-connected notes sit inward;
+ *  - an inset spring beyond 0.8 of the usable radius. It matters only for notes with no links, which repulsion alone
+ *    leaves on the rim (90% -> 69% in the bench's no-links case); with links the pull already keeps them in;
+ *  - the hard containment projection, which is the guarantee; none of the above is relied on for it.
+ * Measured on the bench (beyond 0.8 of the usable radius is 36% of a disc's area, so ~36-40% there is a uniform fill, not
+ * rim-hugging): notes of folders with 1-7 notes 0-7%, of 8+ notes 40%; hubs at about 0.3 of the radius, others about 0.7
+ * (uniform fill is 0.67); any share of cross-folder links gives the same result, since they no longer move notes.
  */
 const NESTED_PULL = 0.25
-const NESTED_REPULSION_RANGE = 110
 const NESTED_LINK = 0.12
 const NESTED_LINK_DISTANCE = 80
 const NESTED_CHARGE = 250
+/** A folder with fewer notes than this repels with a proportionally weaker force: a handful of notes need no pushing apart to fill a small disc. */
+const CHARGE_FULL_AT = 12
 /** Hubs are pulled to the centre harder: the centring strength grows by this per square root of degree (capped at 3). */
 const HUB_PULL = 1.5
-const CROSS_LINK = 0.03
 /**
  * Notes are eased off the rim: beyond this share of the usable radius a spring pushes them back, so a settled
  * compartment reads as a filled disc rather than a ring. Gentle by design — the hard projection stays the guarantee.
  */
 const INSET_START = 0.8
 const INSET_STRENGTH = 2
+
+/**
+ * Repulsion within each compartment only. Notes of different folders are already apart by construction (the
+ * compartments are disjoint), so a global many-body force only let a neighbouring crowd shove a small folder's
+ * notes onto its wall. One many-body force per compartment, each over that compartment's notes: cheaper than one
+ * over all of them, and its range is the compartment's own size instead of a number tuned for the largest.
+ */
+function forceCompartmentCharge(geometry: Geometry, strength: number): Force<SimNode, SimLink> {
+  let groups: Force<SimNode, SimLink>[] = []
+
+  const force = (alpha: number) => groups.forEach(group => group(alpha))
+
+  force.initialize = (nodes: SimNode[], random: () => number) => {
+    const byDir = new Map<string, SimNode[]>()
+
+    for (const node of nodes) {
+      byDir.set(node.dir, [...(byDir.get(node.dir) ?? []), node])
+    }
+
+    groups = [...byDir]
+      .filter(([, members]) => members.length > 1)
+      .map(([dir, members]) => {
+        const many = forceManyBody<SimNode>().strength(-strength * Math.min(1, members.length / CHARGE_FULL_AT)).distanceMax(2 * (compartmentOf(geometry, dir)?.r ?? Infinity))
+
+        many.initialize(members, random)
+
+        return many
+      })
+  }
+
+  return force
+}
 
 function forceInset(geometry: Geometry): Force<SimNode, SimLink> {
   let nodes: SimNode[] = []
@@ -217,6 +249,18 @@ function forceInset(geometry: Geometry): Force<SimNode, SimLink> {
   return force
 }
 
+/**
+ * Nested mode lays out only the links inside a folder. A link to another folder is a spring over a distance of
+ * hundreds of units whatever the compartments' size, so it beats every centring force and parks the note on its
+ * wall facing the partner (worst in small folders). Those links are still drawn; they just do not move notes.
+ */
+function sameFolderLinks(nodes: readonly SimNode[], links: readonly SimLink[]): SimLink[] {
+  const dirs = new Map(nodes.map(node => [node.id, node.dir]))
+  const dirOf = (end: SimLink['source']) => dirs.get(typeof end === 'object' ? (end as SimNode).id : String(end))
+
+  return links.filter(link => dirOf(link.source) === dirOf(link.target))
+}
+
 /** The simulation. Nested mode pulls each note toward its compartment's centre instead of its folder's anchor. */
 export function createSimulation(
   nodes: SimNode[],
@@ -237,12 +281,12 @@ export function createSimulation(
     .alpha(alpha)
     .force(
       'link',
-      forceLink<SimNode, SimLink>(links)
+      forceLink<SimNode, SimLink>(nested ? sameFolderLinks(nodes, links) : links)
         .id(node => node.id)
         .distance(nested ? NESTED_LINK_DISTANCE : 48)
-        .strength(link => (nested && (link.source as SimNode).dir !== (link.target as SimNode).dir ? CROSS_LINK : nested ? NESTED_LINK : 0.3))
+        .strength(nested ? NESTED_LINK : 0.3)
     )
-    .force('charge', forceManyBody<SimNode>().strength(nested ? -NESTED_CHARGE : -130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340))
+    .force('charge', nested ? forceCompartmentCharge(geometry, NESTED_CHARGE) : forceManyBody<SimNode>().strength(-130).distanceMax(340))
     .force('collide', forceCollide<SimNode>().radius(node => radiusOf(node) + COLLIDE_PAD))
     .force('x', forceX<SimNode>(aim('x')).strength(strength))
     .force('y', forceY<SimNode>(aim('y')).strength(strength))

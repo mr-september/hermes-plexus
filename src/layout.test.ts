@@ -86,8 +86,16 @@ describe('whole-note containment', () => {
   }
 
   it('is violated by bare sim.tick(), which dispatches no tick event: the harness must run the same containment as the live view', () => {
-    const { geometry, nodes, sim } = rig(fixtures['heavy cross-folder links']!)
+    const { geometry, nodes, sim } = rig(fixtures['nested siblings']!)
     let worst = 0
+
+    // The forces keep notes in on their own, so shove them outward: only the containment step can stop that.
+    for (const node of nodes) {
+      const comp = compartmentOf(geometry, node.dir)!
+
+      node.vx = (node.x - comp.x || 1) * 5
+      node.vy = (node.y - comp.y) * 5
+    }
 
     for (let i = 0; i < 30; i++) {
       sim.tick()

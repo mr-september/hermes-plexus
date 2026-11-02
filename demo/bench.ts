@@ -167,6 +167,37 @@ function crowding(label: string, options: SyntheticOptions, steps = 300, hubs = 
   console.log(`${label.padEnd(34)} notes in big compartments ${total}: at rim ${((100 * rim) / total).toFixed(0)}%, mean radial fraction ${(mean / total).toFixed(2)}`)
 }
 
+/** Rim share (beyond 0.8 of the usable radius) by compartment size: small compartments have almost no room, so any steady pull reaches the wall. */
+function bySize(label: string, options: SyntheticOptions, steps = 300) {
+  const { geometry, nodes, sim } = rig(syntheticGraph(options), 'nested')
+
+  for (let i = 0; i < steps; i++) {
+    sim.tick()
+    containAll(nodes, geometry)
+  }
+
+  const perDir = new Map<string, number>()
+
+  nodes.forEach(node => perDir.set(node.dir, (perDir.get(node.dir) ?? 0) + 1))
+
+  const classes = { '1': [0, 0], '2-3': [0, 0], '4-7': [0, 0], '8+': [0, 0] } as Record<string, [number, number]>
+
+  for (const node of nodes) {
+    const n = perDir.get(node.dir)!
+    const comp = compartmentOf(geometry, node.dir)!
+    const frac = Math.hypot(node.x - comp.x, node.y - comp.y) / Math.max(comp.r - radiusOf(node), 1e-9)
+    const cls = classes[n === 1 ? '1' : n < 4 ? '2-3' : n < 8 ? '4-7' : '8+']!
+
+    cls[1]++
+    cls[0] += frac > 0.8 ? 1 : 0
+  }
+
+  console.log(
+    `${label.padEnd(34)} beyond 0.8 of room, by notes per folder: ` +
+      Object.entries(classes).map(([name, [rim, total]]) => `${name}: ${total ? Math.round((100 * rim) / total) : '-'}% (n=${total})`).join(', ')
+  )
+}
+
 const base = { branching: 3, depth: 3, links: 2, skew: 0.7 }
 
 console.log('--- boundary crowding (nested, 300 settled steps)')
@@ -175,6 +206,10 @@ crowding('10% cross-folder', { ...base, crossFraction: 0.1, notes: 600, seed: 2 
 crowding('70% cross-folder', { ...base, crossFraction: 0.7, notes: 600, seed: 2 })
 crowding('hub-and-spoke, 10% cross', { ...base, crossFraction: 0.1, notes: 600, seed: 2 }, 300, true)
 crowding('no links at all', { ...base, links: 0, notes: 600, seed: 2 })
+
+console.log('--- small compartments')
+bySize('30% cross, many small folders', { ...base, branching: 4, crossFraction: 0.3, depth: 3, notes: 300, seed: 3, skew: 1.2 })
+bySize('10% cross, many small folders', { ...base, branching: 4, crossFraction: 0.1, depth: 3, notes: 300, seed: 3, skew: 1.2 })
 
 console.log('--- cost (manual ticks; 60-tick means)')
 timing('N=500', { ...base, notes: 500 })
