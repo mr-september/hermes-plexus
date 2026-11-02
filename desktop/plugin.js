@@ -206,6 +206,12 @@ function buildGraph(notes) {
     }))
   };
 }
+function sameGraph(a3, b) {
+  return a3.nodes.length === b.nodes.length && a3.edges.length === b.edges.length && a3.nodes.every((node, i2) => {
+    const other = b.nodes[i2];
+    return node.id === other.id && node.degree === other.degree && node.title === other.title && node.tags.length === other.tags.length && node.tags.every((tag, j) => tag === other.tags[j]);
+  }) && a3.edges.every((edge, i2) => edge.source === b.edges[i2].source && edge.target === b.edges[i2].target);
+}
 var radiusOf = (node) => 3 + Math.sqrt(node.degree) * 1.7;
 var backlinksOf = (graph, rel) => graph.edges.filter((edge) => edge.target === rel).map((edge) => edge.source);
 function neighborhood(graph, rel, depth) {
@@ -545,6 +551,9 @@ var en = {
     announceHid: (path, notes) => `Hid ${path}, ${notes} notes`,
     announceShown: (path) => `Removed ${path}`,
     announceStill: (path, by) => `Removed ${path}; still hidden by ${by}`,
+    edgesNow: (state) => `Edges: ${state}. Click to change.`,
+    edgesOff: "hidden",
+    edgesOn: "shown",
     graphLabel: "Note graph. Arrow keys move between linked notes, Enter opens the selected note.",
     hiddenGroup: "Hidden",
     hiddenSuffix: "(hidden)",
@@ -636,6 +645,7 @@ var en = {
 var DEFAULT_PREFS = {
   autosaveMs: 800,
   cluster: "folder",
+  edges: true,
   hiddenFolders: ["archive", "_archived"],
   labels: "auto",
   noteFrac: 0.5,
@@ -1170,7 +1180,8 @@ var VaultStore = class {
     }
   }
   graphFor(notes) {
-    return buildGraph(notes.map((note) => this.cache.get(note.rel)?.index ?? { links: [], rel: note.rel, tags: [] }));
+    const next = buildGraph(notes.map((note) => this.cache.get(note.rel)?.index ?? { links: [], rel: note.rel, tags: [] }));
+    return sameGraph(this.state.graph, next) ? this.state.graph : next;
   }
   reindex(rel, text) {
     const index2 = indexNote(rel, text);
@@ -2031,6 +2042,25 @@ function FileTree(props) {
     )
   ] });
 }
+
+// src/edges.ts
+var edgeClass = (a3, b) => a3.dir === b.dir ? "compartment" : a3.folder !== "" && a3.folder === b.folder ? "top" : "across";
+function drawnEdges(nodes, edges) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const { source, target } of edges) {
+    const s = nodes.get(source);
+    const t2 = nodes.get(target);
+    const key = source < target ? `${source}\0${target}` : `${target}\0${source}`;
+    if (!s || !t2 || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({ class: edgeClass(s, t2), source: s, target: t2 });
+  }
+  return out;
+}
+var segmentInView = (a3, b, view, margin) => Math.max(a3.x, b.x) >= view.left - margin && Math.min(a3.x, b.x) <= view.right + margin && Math.max(a3.y, b.y) >= view.top - margin && Math.min(a3.y, b.y) <= view.bottom + margin;
 
 // src/graph-view.tsx
 import { Fragment, useEffect as useEffect3, useMemo as useMemo3, useRef as useRef3, useState as useState2 } from "react";
@@ -3517,27 +3547,56 @@ var fromOffset = (compartment, u, v) => [
 ];
 var NESTED_PULL = 0.25;
 var NESTED_REPULSION_RANGE = 60;
-var CROSS_LINK = 0.1;
+var CROSS_LINK = 0.03;
+var INSET_START = 0.5;
+var INSET_STRENGTH = 2;
+function forceInset(geometry) {
+  let nodes = [];
+  const force = (alpha) => {
+    for (const node of nodes) {
+      const comp = compartmentOf(geometry, node.dir);
+      if (!comp || node.fx != null) {
+        continue;
+      }
+      const room = Math.max(0, comp.r - radiusOf(node));
+      const dx = node.x - comp.x;
+      const dy = node.y - comp.y;
+      const d = Math.hypot(dx, dy);
+      const start = room * INSET_START;
+      if (d > start && d > 0) {
+        const push = (d - start) / d * INSET_STRENGTH * alpha;
+        node.vx -= dx * push;
+        node.vy -= dy * push;
+      }
+    }
+  };
+  force.initialize = (list) => void (nodes = list);
+  return force;
+}
 function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
   const anchors = folderAnchors(folders, cluster);
   const nested = cluster === "nested";
   const pull = cluster === "none" ? 0.02 : nested ? NESTED_PULL : 0.07;
   const aim = (axis) => (node) => nested ? compartmentOf(geometry, node.dir)?.[axis] ?? 0 : anchors.get(node.folder)?.[axis] ?? 0;
-  return simulation_default(nodes).alpha(alpha).force(
+  const sim = simulation_default(nodes).alpha(alpha).force(
     "link",
     link_default(links).id((node) => node.id).distance(48).strength((link) => nested && link.source.dir !== link.target.dir ? CROSS_LINK : 0.3)
   ).force("charge", manyBody_default().strength(-130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340)).force("collide", collide_default().radius((node) => radiusOf(node) + COLLIDE_PAD)).force("x", x_default2(aim("x")).strength(pull)).force("y", y_default2(aim("y")).strength(pull));
+  return nested ? sim.force("inset", forceInset(geometry)) : sim;
 }
 
 // src/graph-view.tsx
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var TOUCHED_MS = 10 * 60 * 1e3;
 var REGION_MIN_PX = 14;
-var LABEL_MIN_PX = 40;
+var LABEL_MIN_PX = 20;
+var LABEL_COMPACT_PX = 9;
 var CURRENT_FRACTION = 0.25;
 var FIT_CAP = 1.8;
 var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
 var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
+var EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 };
+var EDGE_RECEDE = 0.25;
 function GraphView(props) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props;
   const nested = cluster === "nested";
@@ -3547,6 +3606,7 @@ function GraphView(props) {
   const simRef = useRef3(null);
   const nodesRef = useRef3([]);
   const linksRef = useRef3([]);
+  const edgesRef = useRef3([]);
   const viewRef = useRef3({ k: 1, x: 0, y: 0 });
   const sizeRef = useRef3({ h: 0, w: 0 });
   const hoverRef = useRef3(null);
@@ -3607,6 +3667,20 @@ function GraphView(props) {
     }
   };
   const paintRegions = (ctx, ink, labelPlaced) => {
+    let haloColor = null;
+    const halo = () => {
+      if (haloColor === null) {
+        haloColor = "rgba(0, 0, 0, 0.55)";
+        for (let el = canvasRef.current; el; el = el.parentElement) {
+          const bg = getComputedStyle(el).backgroundColor;
+          if (bg && !/^rgba?(.*,s*0)$|^transparent$/.test(bg)) {
+            haloColor = bg;
+            break;
+          }
+        }
+      }
+      return haloColor;
+    };
     const geo = geometryRef.current;
     const { h, w } = sizeRef.current;
     const { k, x: x3, y: y3 } = viewRef.current;
@@ -3676,25 +3750,34 @@ function GraphView(props) {
       const forced = region.id === focusId || region.id === currentRef.current;
       if (region.label && !covers2 && (s >= LABEL_MIN_PX || forced)) {
         const text = hidden ? `${region.label} ${t2("graph.hiddenSuffix")}` : region.label;
-        const width = ctx.measureText(text).width;
-        const half = width / 2 + 3 / k;
-        const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
-        const dy = Math.max(3 / k, room);
-        const box = [
-          region.x - width / 2,
-          region.y - region.r + dy,
-          region.x + width / 2,
-          region.y - region.r + dy + fontPx * 1.15
-        ];
-        if (forced || room < region.r && rectClearOf(box, region.content, 2 / k)) {
-          if (forced || !labelPlaced.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
-            labelPlaced.push(box);
-            labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });
-            ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85;
-            ctx.fillStyle = ink;
-            ctx.fillText(text, region.x, box[1]);
+        const lay = (px) => {
+          ctx.font = `600 ${px / k}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+          const width = ctx.measureText(text).width;
+          const half = width / 2 + 3 / k;
+          const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
+          const top3 = region.y - region.r + Math.max(3 / k, room);
+          return { box: [region.x - width / 2, top3, region.x + width / 2, top3 + px / k * 1.15], room, width };
+        };
+        const taken = (box) => labelPlaced.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1]);
+        const sized = lay(Math.min(11, Math.max(LABEL_COMPACT_PX, s / 5)));
+        const clear = sized.room < region.r && rectClearOf(sized.box, region.content, 2 / k);
+        const overlay = forced || clear ? null : lay(LABEL_COMPACT_PX);
+        const spot = forced || clear ? sized : overlay && overlay.width <= 1.5 * region.r ? overlay : null;
+        if (spot && (forced || !taken(spot.box))) {
+          const { box } = spot;
+          labelPlaced.push(box);
+          labelBoxesRef.current.push({ box: [box[0] - 2 / k, box[1] - 2 / k, box[2] + 2 / k, box[3] + 2 / k], id: region.id });
+          ctx.globalAlpha = lit || forced ? 1 : focusId !== null ? 0.4 : 0.85;
+          if (spot === overlay) {
+            ctx.lineJoin = "round";
+            ctx.lineWidth = 3 / k;
+            ctx.strokeStyle = halo();
+            ctx.strokeText(text, region.x, box[1]);
           }
+          ctx.fillStyle = ink;
+          ctx.fillText(text, region.x, box[1]);
         }
+        ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
       }
       for (const id of region.children) {
         visit(geo.regions.get(id));
@@ -3749,16 +3832,63 @@ function GraphView(props) {
     if (nested) {
       paintRegions(ctx, ink, placed);
     }
-    for (const link of linksRef.current) {
-      const s = link.source;
-      const target = link.target;
-      const lit = focus !== null && (s.id === focus || target.id === focus);
-      ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08;
-      ctx.strokeStyle = lit ? accent : muted;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(target.x, target.y);
-      ctx.stroke();
+    if (live.current.edges === false) {
+    } else if (nested && live.current.tierEdges !== false) {
+      const view = { bottom: (h - y3) / k, left: -x3 / k, right: (w - x3) / k, top: -y3 / k };
+      const margin = 1 / k;
+      const incident = [];
+      const groups = /* @__PURE__ */ new Map();
+      for (const edge of edgesRef.current) {
+        if (!segmentInView(edge.source, edge.target, view, margin)) {
+          continue;
+        }
+        if (focus !== null && (edge.source.id === focus || edge.target.id === focus)) {
+          incident.push(edge);
+          continue;
+        }
+        const hue = colorOf(edge.source.folder);
+        const key = edge.class === "across" ? "across" : `${edge.class}:${hue}`;
+        let group = groups.get(key);
+        if (!group) {
+          group = {
+            alpha: EDGE_ALPHA[edge.class] * (focus === null ? 1 : EDGE_RECEDE),
+            color: edge.class === "across" ? muted : hsl(hue, 58),
+            edges: []
+          };
+          groups.set(key, group);
+        }
+        group.edges.push(edge);
+      }
+      const stroke = (edges, color, alpha) => {
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        for (const { source: source2, target } of edges) {
+          ctx.moveTo(source2.x, source2.y);
+          ctx.lineTo(target.x, target.y);
+        }
+        ctx.stroke();
+      };
+      for (const cls of ["across", "top", "compartment"]) {
+        for (const [key, group] of groups) {
+          if (key.startsWith(cls)) {
+            stroke(group.edges, group.color, group.alpha);
+          }
+        }
+      }
+      stroke(incident, accent, 0.9);
+    } else {
+      for (const link of linksRef.current) {
+        const s = link.source;
+        const target = link.target;
+        const lit = focus !== null && (s.id === focus || target.id === focus);
+        ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08;
+        ctx.strokeStyle = lit ? accent : muted;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.stroke();
+      }
     }
     for (const node of nodesRef.current) {
       const dim = focus !== null && !near.has(node.id) || searching && !matchesSearch(node, search);
@@ -3959,6 +4089,7 @@ function GraphView(props) {
     const bigChange = previous.size > 0 && changed >= Math.max(3, 0.25 * Math.max(previous.size, nodes.length));
     nodesRef.current = nodes;
     linksRef.current = links;
+    edgesRef.current = drawnEdges(new Map(nodes.map((node) => [node.id, node])), graph.edges);
     simRef.current?.stop();
     const occupied = /* @__PURE__ */ new Set();
     if (nested) {
@@ -23440,6 +23571,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                 GraphView,
                 {
                   cluster: prefs.cluster,
+                  edges: prefs.edges,
                   fullGraph: graph,
                   graph: shown,
                   hiddenFolders: hiddenInGraph,
@@ -23460,6 +23592,7 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   positionsMode: vault.positionsMode,
                   search,
                   selected: active,
+                  tierEdges: !local,
                   touched: state.touched
                 }
               ),
@@ -23516,6 +23649,19 @@ function VaultWorkspace({ fs, prefs: prefsStore, store }) {
                   },
                   mode
                 )) }),
+                /* @__PURE__ */ jsx8(
+                  "button",
+                  {
+                    "aria-label": t2("graph.edgesNow", t2(prefs.edges ? "graph.edgesOn" : "graph.edgesOff")),
+                    "aria-pressed": prefs.edges,
+                    className: "vc-toggle",
+                    "data-on": prefs.edges,
+                    onClick: () => prefsStore.set({ edges: !prefs.edges }),
+                    title: t2("graph.edgesNow", t2(prefs.edges ? "graph.edgesOn" : "graph.edgesOff")),
+                    type: "button",
+                    children: /* @__PURE__ */ jsx8(Codicon4, { name: "git-compare", size: "0.9rem" })
+                  }
+                ),
                 /* @__PURE__ */ jsx8(
                   "button",
                   {

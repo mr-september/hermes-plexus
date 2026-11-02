@@ -13,6 +13,8 @@ export interface Prefs {
   /** Milliseconds of idle typing before a note is saved. */
   autosaveMs: number
   cluster: ClusterMode
+  /** Draw the graph's edges. */
+  edges: boolean
   /** Folder names skipped when scanning (case-insensitive). */
   hiddenFolders: string[]
   labels: LabelMode
@@ -31,6 +33,7 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = {
   autosaveMs: 800,
   cluster: 'folder',
+  edges: true,
   hiddenFolders: ['archive', '_archived'],
   labels: 'auto',
   noteFrac: 0.5,

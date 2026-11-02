@@ -170,6 +170,15 @@ describe('VaultWorkspace', () => {
     fireEvent.click(within(layout).getByRole('radio', { name: 'Free' }))
     expect(prefs.get().cluster).toBe('none')
 
+    const edges = () => screen.getByRole('button', { name: /^Edges:/ })
+
+    expect(prefs.get().edges).toBe(true)
+    fireEvent.click(edges())
+    expect(prefs.get().edges).toBe(false)
+    expect(edges().getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(edges())
+    expect(prefs.get().edges).toBe(true)
+
     const labels = () => screen.getByRole('button', { name: /^Note labels:/ })
 
     expect(labels().getAttribute('aria-label')).toContain('When zoomed in')

@@ -292,6 +292,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
             ) : (
               <GraphView
                 cluster={prefs.cluster}
+                edges={prefs.edges}
                 fullGraph={graph}
                 graph={shown}
                 hiddenFolders={hiddenInGraph}
@@ -312,6 +313,7 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                 positionsMode={vault.positionsMode}
                 search={search}
                 selected={active}
+                tierEdges={!local}
                 touched={state.touched}
               />
             )}
@@ -364,6 +366,17 @@ export function VaultWorkspace({ fs, prefs: prefsStore, store }: WorkspaceProps)
                     </button>
                   ))}
                 </div>
+                <button
+                  aria-label={t('graph.edgesNow', t(prefs.edges ? 'graph.edgesOn' : 'graph.edgesOff'))}
+                  aria-pressed={prefs.edges}
+                  className="vc-toggle"
+                  data-on={prefs.edges}
+                  onClick={() => prefsStore.set({ edges: !prefs.edges })}
+                  title={t('graph.edgesNow', t(prefs.edges ? 'graph.edgesOn' : 'graph.edgesOff'))}
+                  type="button"
+                >
+                  <Codicon name="git-compare" size="0.9rem" />
+                </button>
                 <button
                   aria-label={t('graph.labelsNow', t(LABEL_NAMES[prefs.labels]))}
                   className="vc-toggle"

@@ -778,3 +778,50 @@ describe('GraphView position persistence', () => {
     }
   })
 })
+
+describe('GraphView nested edges', () => {
+  // `full` has 8 stored edges but 7 linked pairs: a1 and b1 link to each other.
+  const lineTos = (paint: Paint) => paint.filter(call => call[0] === 'lineTo').length
+
+  it('draws one line per linked pair in nested mode (the stored reciprocal pair is not stroked twice), every stored edge otherwise', async () => {
+    render(<GraphView {...props(full, { cluster: 'nested' })} />)
+    await settle()
+    expect(lineTos(lastPaint())).toBe(7)
+
+    cleanup()
+    calls = []
+    render(<GraphView {...props(full, { cluster: 'folder' })} />)
+    await settle()
+    expect(lineTos(lastPaint())).toBe(8)
+  })
+
+  it('draws no edge at all when edges are off, even for a selected note', async () => {
+    render(<GraphView {...props(full, { cluster: 'nested', edges: false, selected: 'A/a1.md' })} />)
+    await settle()
+    expect(lineTos(lastPaint())).toBe(0)
+  })
+
+  it('paints the focused note’s edges last, in the accent, over the class tiers; the local graph skips the tiers', async () => {
+    render(<GraphView {...props(full, { cluster: 'nested', selected: 'A/a1.md' })} />)
+    await settle()
+
+    const paint = lastPaint()
+    const last = paint.map(call => call[0]).lastIndexOf('lineTo')
+    let first = last
+
+    while (paint[first - 1]?.[0] === 'lineTo' || paint[first - 1]?.[0] === 'moveTo') {
+      first--
+    }
+
+    // a1 links to a2, a3 and b1.
+    expect(paint.slice(first, last + 1).filter(call => call[0] === 'lineTo')).toHaveLength(3)
+    expect(paint.slice(0, first).findLast(call => call[0] === 'set' && call[1][0] === 'globalAlpha')![1][1]).toBe(0.9)
+
+    cleanup()
+    calls = []
+    render(<GraphView {...props(full, { cluster: 'nested', tierEdges: false })} />)
+    await settle()
+    // Untiered: the legacy per-link strokes, every stored edge.
+    expect(lineTos(lastPaint())).toBe(8)
+  })
+})

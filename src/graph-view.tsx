@@ -1,4 +1,5 @@
 import type { Simulation } from 'd3-force'
+import { type DrawnEdge, drawnEdges, segmentInView } from './edges'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Codicon, usePluginI18n } from '@hermes/plugin-sdk'
@@ -59,10 +60,17 @@ const hsl = (hue: number, lightness: number): string => `hsl(${hue} 62% ${lightn
 const rectClearOf = (box: readonly [number, number, number, number], disc: { r: number; x: number; y: number }, margin: number): boolean =>
   Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin
 
+/** Stroke alpha of each edge class in the nested layout; the across class is the faintest, so structure reads first. */
+const EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 } as const
+/** Non-incident edges keep this share of their strength while a note is focused. */
+const EDGE_RECEDE = 0.25
+
 export interface GraphViewProps {
   cluster: ClusterMode
   /** The whole vault's graph. Nested region geometry comes from it, so filters never repack the map. Defaults to `graph`. */
   fullGraph?: VaultGraph
+  /** Draw edges at all (default true). Off suppresses every edge, a focused note's included. */
+  edges?: boolean
   /** Folder paths hidden from the graph; each covers its subtree. Every entry has a control that removes it. */
   hiddenFolders: ReadonlySet<string>
   graph: VaultGraph
@@ -92,6 +100,8 @@ export interface GraphViewProps {
   positionsMode?: 'folder' | 'none'
   search: string
   selected: null | string
+  /** Style nested-mode edges by class (default true). Off draws every edge alike, as the local graph does. */
+  tierEdges?: boolean
   touched: Record<string, number>
 }
 
@@ -109,6 +119,7 @@ export function GraphView(props: GraphViewProps) {
   const simRef = useRef<null | Simulation<SimNode, SimLink>>(null)
   const nodesRef = useRef<SimNode[]>([])
   const linksRef = useRef<SimLink[]>([])
+  const edgesRef = useRef<DrawnEdge<SimNode>[]>([])
   const viewRef = useRef<Viewport>({ k: 1, x: 0, y: 0 })
   const sizeRef = useRef({ h: 0, w: 0 })
   const hoverRef = useRef<null | string>(null)
@@ -435,17 +446,77 @@ export function GraphView(props: GraphViewProps) {
       paintRegions(ctx, ink, placed)
     }
 
-    for (const link of linksRef.current) {
-      const s = link.source as SimNode
-      const target = link.target as SimNode
-      const lit = focus !== null && (s.id === focus || target.id === focus)
+    if (live.current.edges === false) {
+      // Edges are off: nothing is drawn, a focused note's included.
+    } else if (nested && live.current.tierEdges !== false) {
+      const view = { bottom: (h - y) / k, left: -x / k, right: (w - x) / k, top: -y / k }
+      const margin = 1 / k
+      const incident: DrawnEdge<SimNode>[] = []
+      const groups = new Map<string, { alpha: number; color: string; edges: DrawnEdge<SimNode>[] }>()
 
-      ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08
-      ctx.strokeStyle = lit ? accent : muted
-      ctx.beginPath()
-      ctx.moveTo(s.x, s.y)
-      ctx.lineTo(target.x, target.y)
-      ctx.stroke()
+      for (const edge of edgesRef.current) {
+        if (!segmentInView(edge.source, edge.target, view, margin)) {
+          continue
+        }
+
+        if (focus !== null && (edge.source.id === focus || edge.target.id === focus)) {
+          incident.push(edge)
+
+          continue
+        }
+
+        const hue = colorOf(edge.source.folder)
+        const key = edge.class === 'across' ? 'across' : `${edge.class}:${hue}`
+        let group = groups.get(key)
+
+        if (!group) {
+          group = {
+            alpha: EDGE_ALPHA[edge.class] * (focus === null ? 1 : EDGE_RECEDE),
+            color: edge.class === 'across' ? muted : hsl(hue, 58),
+            edges: []
+          }
+          groups.set(key, group)
+        }
+
+        group.edges.push(edge)
+      }
+
+      const stroke = (edges: readonly DrawnEdge<SimNode>[], color: string, alpha: number) => {
+        ctx.globalAlpha = alpha
+        ctx.strokeStyle = color
+        ctx.beginPath()
+
+        for (const { source, target } of edges) {
+          ctx.moveTo(source.x, source.y)
+          ctx.lineTo(target.x, target.y)
+        }
+
+        ctx.stroke()
+      }
+
+      // Faintest class first, so the local structure is never painted over; the focused note's edges last.
+      for (const cls of ['across', 'top', 'compartment'] as const) {
+        for (const [key, group] of groups) {
+          if (key.startsWith(cls)) {
+            stroke(group.edges, group.color, group.alpha)
+          }
+        }
+      }
+
+      stroke(incident, accent, 0.9)
+    } else {
+      for (const link of linksRef.current) {
+        const s = link.source as SimNode
+        const target = link.target as SimNode
+        const lit = focus !== null && (s.id === focus || target.id === focus)
+
+        ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08
+        ctx.strokeStyle = lit ? accent : muted
+        ctx.beginPath()
+        ctx.moveTo(s.x, s.y)
+        ctx.lineTo(target.x, target.y)
+        ctx.stroke()
+      }
     }
 
     for (const node of nodesRef.current) {
@@ -733,6 +804,7 @@ export function GraphView(props: GraphViewProps) {
 
     nodesRef.current = nodes
     linksRef.current = links
+    edgesRef.current = drawnEdges(new Map(nodes.map(node => [node.id, node])), graph.edges)
     simRef.current?.stop()
 
     const occupied = new Set<string>()
