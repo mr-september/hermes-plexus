@@ -1,6 +1,6 @@
 # Edge treatment in the nested graph
 
-Status: the first increment is implemented (`src/edges.ts`, the nested branch of `paint` in `src/graph-view.tsx`, an `edges` pref and a toolbar toggle); E2, E3 and focus-time direction are not. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture. Revised after review; the first increment is E1 plus conservative viewport culling plus an edge show/hide toggle, in every layout (extended from nested-only on request, to keep one edge implementation). E2 and E3 are deferred, and batching is evaluated as a deliberate visual change.
+Status: the first increment is implemented (`src/edges.ts`, the edge block of `paint` in `src/graph-view.tsx`, an `edges` pref and a toolbar toggle); E2, E3 and focus-time direction are not. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture. Revised after review; the first increment is E1 plus conservative viewport culling plus an edge show/hide toggle, in every layout (extended from nested-only on request, to keep one edge implementation). E2 and E3 are deferred, and batching is evaluated as a deliberate visual change.
 
 ## Context and motivation
 
@@ -26,7 +26,7 @@ The lowest common ancestor of the two folders is not needed for these classes. I
 
 ## First increment
 
-### E1. Tier the style by class (nested mode only)
+### E1. Tier the style by class
 
 - **Same compartment:** tinted with the folder's top-level hue, so the edge reads as part of the region.
 - **Within top-level folder:** the same hue, lighter.
@@ -34,7 +34,7 @@ The lowest common ancestor of the two folders is not needed for these classes. I
 
 "Keep the current weight" is not a number to copy. Today's appearance is `globalAlpha` times a theme colour that may carry its own alpha; replacing it with an opaque HSL at 0.35 could make local edges substantially stronger. Calibrate the tinted classes against the existing composite in both themes, comparing the same settled scene before and after, not the alpha constants.
 
-The tiers apply in nested mode only. Whether to port them to the non-nested layouts is a later decision.
+The tiers apply in every layout (first specified for nested mode only; extended so there is one edge implementation).
 
 The rationale is to apply the visual hierarchy the regions already establish: structure first (discs), local relations second, global relations third.
 
@@ -101,6 +101,5 @@ No performance or coverage thresholds are proposed. Judge paint cost by bench nu
 
 1. Focus-time direction colours (outgoing, incoming, mutual): deferred; decide the palette and legend when built.
 2. Whether batching is adopted, once the before and after images have been compared.
-3. The scope and timing of porting the tiers to the non-nested layouts.
 
 Settled: the dedupe is for drawing only; link counts shown elsewhere are unchanged.
