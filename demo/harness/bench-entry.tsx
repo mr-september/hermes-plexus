@@ -49,10 +49,13 @@ createRoot(root).render(
     hiddenFolders={new Set()}
     labels="auto"
     legendFolders={legend}
+    onClearHidden={() => undefined}
+    onHidePath={() => ({ coveredBy: null })}
     onNestedPositions={() => (settled = true)}
     onOpen={() => undefined}
     onPaintTime={ms => sink.push(ms)}
     onPositions={() => (settled = true)}
+    onShowPath={() => undefined}
     onToggleFolder={() => undefined}
     onTogglePin={() => undefined}
     openRels={new Set()}

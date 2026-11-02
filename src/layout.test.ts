@@ -199,3 +199,40 @@ describe('whole-note containment', () => {
     expect([x, y]).toEqual([node.x, node.y].map(value => expect.closeTo(value, 9)))
   })
 })
+
+describe('settled spacing', () => {
+  it('keeps a lone note near the middle of its small folder despite a crowded neighbour and links into it', () => {
+    const graph = buildGraph([
+      ...ring('Big', 80),
+      indexNote('Small/only.md', Array.from({ length: 6 }, (_, i) => `[[n${i * 7}]]`).join(' '))
+    ])
+
+    const { geometry, nodes, sim } = rig(graph)
+
+    for (let i = 0; i < 200; i++) {
+      step(sim, nodes, geometry)
+    }
+
+    const lone = nodes.find(node => node.dir === 'Small')!
+    const comp = compartmentOf(geometry, 'Small')!
+
+    // A cross-folder link spring, or a neighbour's repulsion reaching across, parks it on the wall instead.
+    expect(Math.hypot(lone.x - comp.x, lone.y - comp.y)).toBeLessThan(0.3 * (comp.r - radiusOf(lone)))
+  })
+
+  it('puts a hub nearer the middle of its folder than the notes that link to it', () => {
+    const spokes = Array.from({ length: 30 }, (_, i) => indexNote(`F/s${i}.md`, '[[hub]]'))
+    const { geometry, nodes, sim } = rig(buildGraph([indexNote('F/hub.md', ''), ...spokes]))
+
+    for (let i = 0; i < 200; i++) {
+      step(sim, nodes, geometry)
+    }
+
+    const comp = compartmentOf(geometry, 'F')!
+    const dist = (node: SimNode) => Math.hypot(node.x - comp.x, node.y - comp.y)
+    const hub = nodes.find(node => node.id === 'F/hub.md')!
+    const others = nodes.filter(node => node !== hub).map(dist)
+
+    expect(dist(hub)).toBeLessThan(others.reduce((a, b) => a + b, 0) / others.length)
+  })
+})

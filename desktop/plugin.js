@@ -3618,6 +3618,7 @@ var LABEL_MIN_PX = 20;
 var LABEL_COMPACT_PX = 9;
 var CURRENT_FRACTION = 0.25;
 var FIT_CAP = 1.8;
+var fontOf = (px, weight) => `${weight} ${px}px "Segoe UI", system-ui, -apple-system, sans-serif`;
 var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
 var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
 var EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 };
@@ -3719,7 +3720,7 @@ function GraphView(props) {
     const chain = new Set(focusId === null ? [] : regionChain(geo, focusId).map((region) => region.id));
     const fontPx = 11 / k;
     labelBoxesRef.current = [];
-    ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+    ctx.font = fontOf(fontPx, 600);
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     const disc = (cx, cy, r, hue, depth, lit, empty, own, dashed) => {
@@ -3777,7 +3778,7 @@ function GraphView(props) {
       if (region.label && !covers2 && (s >= LABEL_MIN_PX || forced)) {
         const text = hidden ? `${region.label} ${t2("graph.hiddenSuffix")}` : region.label;
         const lay = (px) => {
-          ctx.font = `600 ${px / k}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+          ctx.font = fontOf(px / k, 600);
           const width = ctx.measureText(text).width;
           const half = width / 2 + 3 / k;
           const room = region.r > half ? region.r - Math.sqrt(region.r * region.r - half * half) : region.r;
@@ -3803,7 +3804,7 @@ function GraphView(props) {
           ctx.fillStyle = ink;
           ctx.fillText(text, region.x, box[1]);
         }
-        ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+        ctx.font = fontOf(fontPx, 600);
       }
       for (const id of region.children) {
         visit(geo.regions.get(id));
@@ -3937,7 +3938,7 @@ function GraphView(props) {
     }
     const fontPx = 11 / k;
     ctx.fillStyle = ink;
-    ctx.font = `${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`;
+    ctx.font = fontOf(fontPx, 400);
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     const priority = (node, matched) => node.id === focus ? 1e6 : near.has(node.id) ? 1e5 + node.degree : matched ? 1e4 + node.degree : node.degree;

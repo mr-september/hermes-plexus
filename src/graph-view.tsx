@@ -35,8 +35,6 @@ import {
   regionOfDir
 } from './regions'
 
-type Viewport = View
-
 /** Notes changed by something else stay highlighted this long. */
 const TOUCHED_MS = 10 * 60 * 1000
 
@@ -53,6 +51,8 @@ const LABEL_COMPACT_PX = 9
 const CURRENT_FRACTION = 0.25
 /** The global Fit action never magnifies past this; framing a folder is not capped. */
 const FIT_CAP = 1.8
+
+const fontOf = (px: number, weight: 400 | 600): string => `${weight} ${px}px "Segoe UI", system-ui, -apple-system, sans-serif`
 
 const hsl = (hue: number, lightness: number): string => `hsl(${hue} 62% ${lightness}%)`
 
@@ -122,7 +122,7 @@ export function GraphView(props: GraphViewProps) {
   const nodesRef = useRef<SimNode[]>([])
   const linksRef = useRef<SimLink[]>([])
   const edgesRef = useRef<DrawnEdge<SimNode>[]>([])
-  const viewRef = useRef<Viewport>({ k: 1, x: 0, y: 0 })
+  const viewRef = useRef<View>({ k: 1, x: 0, y: 0 })
   const sizeRef = useRef({ h: 0, w: 0 })
   const hoverRef = useRef<null | string>(null)
   const hoverRegionRef = useRef<null | string>(null)
@@ -245,7 +245,7 @@ export function GraphView(props: GraphViewProps) {
     const fontPx = 11 / k
 
     labelBoxesRef.current = []
-    ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`
+    ctx.font = fontOf(fontPx, 600)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
 
@@ -343,7 +343,7 @@ export function GraphView(props: GraphViewProps) {
 
         // Where `text` sits at `px` screen pixels: in the top of the region, as high as the circle's curve allows.
         const lay = (px: number) => {
-          ctx.font = `600 ${px / k}px "Segoe UI", system-ui, -apple-system, sans-serif`
+          ctx.font = fontOf(px / k, 600)
 
           const width = ctx.measureText(text).width
           const half = width / 2 + 3 / k
@@ -379,7 +379,7 @@ export function GraphView(props: GraphViewProps) {
           ctx.fillText(text, region.x, box[1])
         }
 
-        ctx.font = `600 ${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`
+        ctx.font = fontOf(fontPx, 600)
       }
 
       for (const id of region.children) {
@@ -553,7 +553,7 @@ export function GraphView(props: GraphViewProps) {
     const fontPx = 11 / k
 
     ctx.fillStyle = ink
-    ctx.font = `${fontPx}px "Segoe UI", system-ui, -apple-system, sans-serif`
+    ctx.font = fontOf(fontPx, 400)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
 
@@ -1003,7 +1003,7 @@ export function GraphView(props: GraphViewProps) {
     node: null | SimNode
     startX: number
     startY: number
-    view: Viewport
+    view: View
   }>(null)
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
