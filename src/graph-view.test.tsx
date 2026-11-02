@@ -397,7 +397,8 @@ describe('GraphView nested folder regions', () => {
     view.rerender(<GraphView {...nestedProps(shown, { fullGraph: tree, hiddenFolders: new Set(['D', '']) })} />)
     await settle()
 
-    expect(regionDiscs(lastPaint())).toEqual(before)
+    // The same map, plus the dashed outline that marks the hidden root notes (a folder's own notes are otherwise undrawn).
+    expect(regionDiscs(lastPaint()).slice(1)).toEqual(before)
     expect(transformOf(lastPaint())).toEqual(camera)
   })
 
@@ -783,16 +784,14 @@ describe('GraphView nested edges', () => {
   // `full` has 8 stored edges but 7 linked pairs: a1 and b1 link to each other.
   const lineTos = (paint: Paint) => paint.filter(call => call[0] === 'lineTo').length
 
-  it('draws one line per linked pair in nested mode (the stored reciprocal pair is not stroked twice), every stored edge otherwise', async () => {
-    render(<GraphView {...props(full, { cluster: 'nested' })} />)
-    await settle()
-    expect(lineTos(lastPaint())).toBe(7)
-
-    cleanup()
-    calls = []
-    render(<GraphView {...props(full, { cluster: 'folder' })} />)
-    await settle()
-    expect(lineTos(lastPaint())).toBe(8)
+  it('draws one line per linked pair in every layout (the stored reciprocal pair is not stroked twice)', async () => {
+    for (const cluster of ['nested', 'folder', 'none'] as const) {
+      cleanup()
+      calls = []
+      render(<GraphView {...props(full, { cluster })} />)
+      await settle()
+      expect(lineTos(lastPaint()), cluster).toBe(7)
+    }
   })
 
   it('draws no edge at all when edges are off, even for a selected note', async () => {
@@ -821,7 +820,8 @@ describe('GraphView nested edges', () => {
     calls = []
     render(<GraphView {...props(full, { cluster: 'nested', tierEdges: false })} />)
     await settle()
-    // Untiered: the legacy per-link strokes, every stored edge.
-    expect(lineTos(lastPaint())).toBe(8)
+    // Untiered: still one line per pair, now in one neutral group (a single stroke).
+    expect(lineTos(lastPaint())).toBe(7)
+    expect(lastPaint().filter(call => call[0] === 'set' && call[1][0] === 'globalAlpha' && call[1][1] === 0.35)).not.toHaveLength(0)
   })
 })

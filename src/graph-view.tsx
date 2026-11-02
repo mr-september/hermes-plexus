@@ -62,6 +62,8 @@ const rectClearOf = (box: readonly [number, number, number, number], disc: { r: 
 
 /** Stroke alpha of each edge class in the nested layout; the across class is the faintest, so structure reads first. */
 const EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 } as const
+/** Paint order, faintest first. */
+const EDGE_ORDER = ['flat', 'across', 'top', 'compartment'] as const
 /** Non-incident edges keep this share of their strength while a note is focused. */
 const EDGE_RECEDE = 0.25
 
@@ -100,7 +102,7 @@ export interface GraphViewProps {
   positionsMode?: 'folder' | 'none'
   search: string
   selected: null | string
-  /** Style nested-mode edges by class (default true). Off draws every edge alike, as the local graph does. */
+  /** Style edges by class (default true). Off draws every edge alike, as the local graph does. */
   tierEdges?: boolean
   touched: Record<string, number>
 }
@@ -318,7 +320,9 @@ export function GraphView(props: GraphViewProps) {
 
       const comp = region.compartment
 
-      if (comp && region.children.length && comp.r * k >= REGION_MIN_PX) {
+      // A folder's own notes float among its subfolders' discs: their compartment is a packing device, not a drawn
+      // container. Only the vault root's, when its notes are hidden, is outlined (dashed), as the sign of that.
+      if (comp && region.id === '' && hiddenSet.has('') && region.children.length && comp.r * k >= REGION_MIN_PX) {
         disc(
           comp.x,
           comp.y,
@@ -328,7 +332,7 @@ export function GraphView(props: GraphViewProps) {
           lit,
           !occupiedRef.current.has(region.id),
           true,
-          region.id === '' ? hiddenSet.has('') : hidden
+          true
         )
       }
 
@@ -446,13 +450,12 @@ export function GraphView(props: GraphViewProps) {
       paintRegions(ctx, ink, placed)
     }
 
-    if (live.current.edges === false) {
-      // Edges are off: nothing is drawn, a focused note's included.
-    } else if (nested && live.current.tierEdges !== false) {
+    if (live.current.edges !== false) {
+      const tiered = live.current.tierEdges !== false
       const view = { bottom: (h - y) / k, left: -x / k, right: (w - x) / k, top: -y / k }
       const margin = 1 / k
       const incident: DrawnEdge<SimNode>[] = []
-      const groups = new Map<string, { alpha: number; color: string; edges: DrawnEdge<SimNode>[] }>()
+      const groups = new Map<string, { alpha: number; color: string; edges: DrawnEdge<SimNode>[]; rank: number }>()
 
       for (const edge of edgesRef.current) {
         if (!segmentInView(edge.source, edge.target, view, margin)) {
@@ -465,15 +468,18 @@ export function GraphView(props: GraphViewProps) {
           continue
         }
 
+        // Untiered (the local graph): every edge alike, neutral. Tiered: by class, tinted unless across folders.
         const hue = colorOf(edge.source.folder)
-        const key = edge.class === 'across' ? 'across' : `${edge.class}:${hue}`
+        const cls = tiered ? edge.class : 'flat'
+        const key = cls === 'across' || cls === 'flat' ? cls : `${cls}:${hue}`
         let group = groups.get(key)
 
         if (!group) {
           group = {
-            alpha: EDGE_ALPHA[edge.class] * (focus === null ? 1 : EDGE_RECEDE),
-            color: edge.class === 'across' ? muted : hsl(hue, 58),
-            edges: []
+            alpha: (cls === 'flat' ? 0.35 : EDGE_ALPHA[cls]) * (focus === null ? 1 : EDGE_RECEDE),
+            color: cls === 'across' || cls === 'flat' ? muted : hsl(hue, 58),
+            edges: [],
+            rank: EDGE_ORDER.indexOf(cls)
           }
           groups.set(key, group)
         }
@@ -495,28 +501,11 @@ export function GraphView(props: GraphViewProps) {
       }
 
       // Faintest class first, so the local structure is never painted over; the focused note's edges last.
-      for (const cls of ['across', 'top', 'compartment'] as const) {
-        for (const [key, group] of groups) {
-          if (key.startsWith(cls)) {
-            stroke(group.edges, group.color, group.alpha)
-          }
-        }
+      for (const group of [...groups.values()].sort((p, q) => p.rank - q.rank)) {
+        stroke(group.edges, group.color, group.alpha)
       }
 
       stroke(incident, accent, 0.9)
-    } else {
-      for (const link of linksRef.current) {
-        const s = link.source as SimNode
-        const target = link.target as SimNode
-        const lit = focus !== null && (s.id === focus || target.id === focus)
-
-        ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08
-        ctx.strokeStyle = lit ? accent : muted
-        ctx.beginPath()
-        ctx.moveTo(s.x, s.y)
-        ctx.lineTo(target.x, target.y)
-        ctx.stroke()
-      }
     }
 
     for (const node of nodesRef.current) {

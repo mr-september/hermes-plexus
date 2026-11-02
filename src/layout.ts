@@ -165,15 +165,25 @@ export interface LayoutSpec {
  * rim) found the cross-folder pull — proportional to a distance of hundreds — still beat the centring pull, and that plain
  * repulsion alone leaves 44% on the rim; so cross links are weakened to 0.03 and an inset spring eases notes off the rim
  * beyond half the usable radius (rim share 63% -> 10% at 70% cross-links, 27% -> 0% at 10%; mean radial fraction 0.5-0.6).
+ * A third pass (live vault: notes clumped near the middle with the outer ring empty, hubs not central) widened the spacing:
+ * weaker, longer intra-folder links (0.12 at 80), stronger and longer-ranged repulsion (250 within 110), the inset spring
+ * starting at 0.8 of the usable radius, and a centring pull that grows with degree. On the bench's hub-and-spoke vault,
+ * hubs sit at 0.38 of the compartment radius against 0.61 for the notes in the lower half by degree (0.45 vs 0.47 before),
+ * and the mean radial fraction rises from 0.50 to 0.56 with 1% on the rim. Same force set, so the per-tick cost is unchanged.
  */
 const NESTED_PULL = 0.25
-const NESTED_REPULSION_RANGE = 60
+const NESTED_REPULSION_RANGE = 110
+const NESTED_LINK = 0.12
+const NESTED_LINK_DISTANCE = 80
+const NESTED_CHARGE = 250
+/** Hubs are pulled to the centre harder: the centring strength grows by this per square root of degree (capped at 3). */
+const HUB_PULL = 1.5
 const CROSS_LINK = 0.03
 /**
  * Notes are eased off the rim: beyond this share of the usable radius a spring pushes them back, so a settled
  * compartment reads as a filled disc rather than a ring. Gentle by design — the hard projection stays the guarantee.
  */
-const INSET_START = 0.5
+const INSET_START = 0.8
 const INSET_STRENGTH = 2
 
 function forceInset(geometry: Geometry): Force<SimNode, SimLink> {
@@ -218,6 +228,8 @@ export function createSimulation(
   const nested = cluster === 'nested'
   const pull = cluster === 'none' ? 0.02 : nested ? NESTED_PULL : 0.07
 
+  const strength = (node: SimNode) => (nested ? pull * (1 + HUB_PULL * Math.min(3, Math.sqrt(node.degree))) : pull)
+
   const aim = (axis: 'x' | 'y') => (node: SimNode) =>
     nested ? (compartmentOf(geometry, node.dir)?.[axis] ?? 0) : (anchors.get(node.folder)?.[axis] ?? 0)
 
@@ -227,13 +239,13 @@ export function createSimulation(
       'link',
       forceLink<SimNode, SimLink>(links)
         .id(node => node.id)
-        .distance(48)
-        .strength(link => (nested && (link.source as SimNode).dir !== (link.target as SimNode).dir ? CROSS_LINK : 0.3))
+        .distance(nested ? NESTED_LINK_DISTANCE : 48)
+        .strength(link => (nested && (link.source as SimNode).dir !== (link.target as SimNode).dir ? CROSS_LINK : nested ? NESTED_LINK : 0.3))
     )
-    .force('charge', forceManyBody<SimNode>().strength(-130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340))
+    .force('charge', forceManyBody<SimNode>().strength(nested ? -NESTED_CHARGE : -130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340))
     .force('collide', forceCollide<SimNode>().radius(node => radiusOf(node) + COLLIDE_PAD))
-    .force('x', forceX<SimNode>(aim('x')).strength(pull))
-    .force('y', forceY<SimNode>(aim('y')).strength(pull))
+    .force('x', forceX<SimNode>(aim('x')).strength(strength))
+    .force('y', forceY<SimNode>(aim('y')).strength(strength))
 
   return nested ? sim.force('inset', forceInset(geometry)) : sim
 }

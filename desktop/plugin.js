@@ -3546,9 +3546,13 @@ var fromOffset = (compartment, u, v) => [
   compartment.y + v * compartment.r
 ];
 var NESTED_PULL = 0.25;
-var NESTED_REPULSION_RANGE = 60;
+var NESTED_REPULSION_RANGE = 110;
+var NESTED_LINK = 0.12;
+var NESTED_LINK_DISTANCE = 80;
+var NESTED_CHARGE = 250;
+var HUB_PULL = 1.5;
 var CROSS_LINK = 0.03;
-var INSET_START = 0.5;
+var INSET_START = 0.8;
 var INSET_STRENGTH = 2;
 function forceInset(geometry) {
   let nodes = [];
@@ -3577,11 +3581,12 @@ function createSimulation(nodes, links, { cluster, folders, geometry }, alpha) {
   const anchors = folderAnchors(folders, cluster);
   const nested = cluster === "nested";
   const pull = cluster === "none" ? 0.02 : nested ? NESTED_PULL : 0.07;
+  const strength = (node) => nested ? pull * (1 + HUB_PULL * Math.min(3, Math.sqrt(node.degree))) : pull;
   const aim = (axis) => (node) => nested ? compartmentOf(geometry, node.dir)?.[axis] ?? 0 : anchors.get(node.folder)?.[axis] ?? 0;
   const sim = simulation_default(nodes).alpha(alpha).force(
     "link",
-    link_default(links).id((node) => node.id).distance(48).strength((link) => nested && link.source.dir !== link.target.dir ? CROSS_LINK : 0.3)
-  ).force("charge", manyBody_default().strength(-130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340)).force("collide", collide_default().radius((node) => radiusOf(node) + COLLIDE_PAD)).force("x", x_default2(aim("x")).strength(pull)).force("y", y_default2(aim("y")).strength(pull));
+    link_default(links).id((node) => node.id).distance(nested ? NESTED_LINK_DISTANCE : 48).strength((link) => nested && link.source.dir !== link.target.dir ? CROSS_LINK : nested ? NESTED_LINK : 0.3)
+  ).force("charge", manyBody_default().strength(nested ? -NESTED_CHARGE : -130).distanceMax(nested ? NESTED_REPULSION_RANGE : 340)).force("collide", collide_default().radius((node) => radiusOf(node) + COLLIDE_PAD)).force("x", x_default2(aim("x")).strength(strength)).force("y", y_default2(aim("y")).strength(strength));
   return nested ? sim.force("inset", forceInset(geometry)) : sim;
 }
 
@@ -3596,6 +3601,7 @@ var FIT_CAP = 1.8;
 var hsl = (hue, lightness) => `hsl(${hue} 62% ${lightness}%)`;
 var rectClearOf = (box, disc, margin) => Math.hypot(Math.max(box[0], Math.min(disc.x, box[2])) - disc.x, Math.max(box[1], Math.min(disc.y, box[3])) - disc.y) >= disc.r + margin;
 var EDGE_ALPHA = { across: 0.15, compartment: 0.5, top: 0.28 };
+var EDGE_ORDER = ["flat", "across", "top", "compartment"];
 var EDGE_RECEDE = 0.25;
 function GraphView(props) {
   const { cluster, graph, hiddenFolders, labels, legendFolders, onOpen, onToggleFolder, selected } = props;
@@ -3734,7 +3740,7 @@ function GraphView(props) {
         disc(region.x, region.y, region.r, hue, region.depth, lit, !occupiedRef.current.has(region.id), false, hidden);
       }
       const comp = region.compartment;
-      if (comp && region.children.length && comp.r * k >= REGION_MIN_PX) {
+      if (comp && region.id === "" && hiddenSet.has("") && region.children.length && comp.r * k >= REGION_MIN_PX) {
         disc(
           comp.x,
           comp.y,
@@ -3744,7 +3750,7 @@ function GraphView(props) {
           lit,
           !occupiedRef.current.has(region.id),
           true,
-          region.id === "" ? hiddenSet.has("") : hidden
+          true
         );
       }
       const forced = region.id === focusId || region.id === currentRef.current;
@@ -3832,8 +3838,8 @@ function GraphView(props) {
     if (nested) {
       paintRegions(ctx, ink, placed);
     }
-    if (live.current.edges === false) {
-    } else if (nested && live.current.tierEdges !== false) {
+    if (live.current.edges !== false) {
+      const tiered = live.current.tierEdges !== false;
       const view = { bottom: (h - y3) / k, left: -x3 / k, right: (w - x3) / k, top: -y3 / k };
       const margin = 1 / k;
       const incident = [];
@@ -3847,13 +3853,15 @@ function GraphView(props) {
           continue;
         }
         const hue = colorOf(edge.source.folder);
-        const key = edge.class === "across" ? "across" : `${edge.class}:${hue}`;
+        const cls = tiered ? edge.class : "flat";
+        const key = cls === "across" || cls === "flat" ? cls : `${cls}:${hue}`;
         let group = groups.get(key);
         if (!group) {
           group = {
-            alpha: EDGE_ALPHA[edge.class] * (focus === null ? 1 : EDGE_RECEDE),
-            color: edge.class === "across" ? muted : hsl(hue, 58),
-            edges: []
+            alpha: (cls === "flat" ? 0.35 : EDGE_ALPHA[cls]) * (focus === null ? 1 : EDGE_RECEDE),
+            color: cls === "across" || cls === "flat" ? muted : hsl(hue, 58),
+            edges: [],
+            rank: EDGE_ORDER.indexOf(cls)
           };
           groups.set(key, group);
         }
@@ -3869,26 +3877,10 @@ function GraphView(props) {
         }
         ctx.stroke();
       };
-      for (const cls of ["across", "top", "compartment"]) {
-        for (const [key, group] of groups) {
-          if (key.startsWith(cls)) {
-            stroke(group.edges, group.color, group.alpha);
-          }
-        }
+      for (const group of [...groups.values()].sort((p, q) => p.rank - q.rank)) {
+        stroke(group.edges, group.color, group.alpha);
       }
       stroke(incident, accent, 0.9);
-    } else {
-      for (const link of linksRef.current) {
-        const s = link.source;
-        const target = link.target;
-        const lit = focus !== null && (s.id === focus || target.id === focus);
-        ctx.globalAlpha = focus === null ? 0.35 : lit ? 0.9 : 0.08;
-        ctx.strokeStyle = lit ? accent : muted;
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.stroke();
-      }
     }
     for (const node of nodesRef.current) {
       const dim = focus !== null && !near.has(node.id) || searching && !matchesSearch(node, search);

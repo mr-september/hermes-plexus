@@ -72,9 +72,36 @@ function timing(label: string, options: SyntheticOptions, ticks = 60) {
   )
 }
 
+/** Every folder gets two hubs that most of its notes link to: the star shapes real vaults grow around index notes. */
+function hubAndSpoke(graph: VaultGraph): VaultGraph {
+  const byDir = new Map<string, string[]>()
+
+  graph.nodes.forEach(node => byDir.set(node.dir, [...(byDir.get(node.dir) ?? []), node.id]))
+
+  const edges = [...graph.edges]
+  let k = 0
+
+  for (const ids of byDir.values()) {
+    ids.slice(2).forEach((id, i) => {
+      if ((k++ * 7) % 10 < 7) {
+        edges.push({ source: id, target: ids[i % 2]! })
+      }
+    })
+  }
+
+  const degree = new Map<string, number>()
+
+  for (const { source, target } of edges) {
+    degree.set(source, (degree.get(source) ?? 0) + 1)
+    degree.set(target, (degree.get(target) ?? 0) + 1)
+  }
+
+  return { edges, nodes: graph.nodes.map(node => ({ ...node, degree: degree.get(node.id) ?? 0 })) }
+}
+
 /** Share of notes in the outer 10% of their compartment's usable radius, over compartments with >= 8 notes. */
-function crowding(label: string, options: SyntheticOptions, steps = 300) {
-  const graph = syntheticGraph(options)
+function crowding(label: string, options: SyntheticOptions, steps = 300, hubs = false) {
+  const graph = hubs ? hubAndSpoke(syntheticGraph(options)) : syntheticGraph(options)
   const { geometry, nodes, sim } = rig(graph, 'nested')
 
   for (let i = 0; i < steps; i++) {
@@ -103,6 +130,40 @@ function crowding(label: string, options: SyntheticOptions, steps = 300) {
     rim += frac > 0.95 ? 1 : 0
   }
 
+  // Hub placement and spacing, per compartment with >= 8 notes: radial fraction of the top-quartile-degree notes against
+  // the bottom half, and mean nearest-neighbour distance over the random-uniform expectation (1 = as spread as chance, < 1 clumped).
+  const byDir = new Map<string, SimNode[]>()
+
+  nodes.forEach(node => byDir.set(node.dir, [...(byDir.get(node.dir) ?? []), node]))
+
+  let hubSum = 0
+  let hubN = 0
+  let leafSum = 0
+  let leafN = 0
+  let spread = 0
+  let spreadN = 0
+
+  for (const [dir, group] of byDir) {
+    if (group.length < 8) {
+      continue
+    }
+
+    const comp = compartmentOf(geometry, dir)!
+    const sorted = [...group].sort((a, b) => b.degree - a.degree)
+    const frac = (node: SimNode) => Math.hypot(node.x - comp.x, node.y - comp.y) / comp.r
+
+    sorted.slice(0, Math.ceil(group.length / 4)).forEach(node => ((hubSum += frac(node)), hubN++))
+    sorted.slice(Math.floor(group.length / 2)).forEach(node => ((leafSum += frac(node)), leafN++))
+
+    const ideal = 0.5 * Math.sqrt((Math.PI * comp.r * comp.r) / group.length)
+
+    for (const node of group) {
+      spread += Math.min(...group.filter(o => o !== node).map(o => Math.hypot(o.x - node.x, o.y - node.y))) / ideal
+      spreadN++
+    }
+  }
+
+  console.log(`  hubs r/R ${(hubSum / hubN).toFixed(2)} vs leaves ${(leafSum / leafN).toFixed(2)}; nearest-neighbour spacing ${(spread / spreadN).toFixed(2)} x uniform-random`)
   console.log(`${label.padEnd(34)} notes in big compartments ${total}: at rim ${((100 * rim) / total).toFixed(0)}%, mean radial fraction ${(mean / total).toFixed(2)}`)
 }
 
@@ -112,6 +173,7 @@ console.log('--- boundary crowding (nested, 300 settled steps)')
 crowding('internal links only', { ...base, crossFraction: 0, notes: 600, seed: 2 })
 crowding('10% cross-folder', { ...base, crossFraction: 0.1, notes: 600, seed: 2 })
 crowding('70% cross-folder', { ...base, crossFraction: 0.7, notes: 600, seed: 2 })
+crowding('hub-and-spoke, 10% cross', { ...base, crossFraction: 0.1, notes: 600, seed: 2 }, 300, true)
 crowding('no links at all', { ...base, links: 0, notes: 600, seed: 2 })
 
 console.log('--- cost (manual ticks; 60-tick means)')

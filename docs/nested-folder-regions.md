@@ -247,3 +247,9 @@ A live vault showed notes hugging compartment rims. Measured with `demo/bench.ts
 Region labels were limited by the crescent fit (about 60px region radius for 11px text), not by `LABEL_MIN_PX`, so lowering that constant alone changes nothing. Labels now shrink to 9px with the region, and from `LABEL_MIN_PX` (20) a label that still does not fit the crescent is drawn haloed over the region's top, allowed to overlap a few small notes; notes keep pointer priority over it.
 
 Every window focus triggered a full rescan that built a new graph object, which rebuilt the simulation (warm settle, position write-back). `VaultStore.graphFor` now returns the previous graph when the rebuilt one is identical (`sameGraph`), so a rescan that found nothing new leaves the layout alone.
+
+### Undrawn compartments and wider spacing (third pass)
+
+A folder that has subfolders no longer draws its notes' compartment: the notes float among the subfolders' discs, and the compartment stays only as the packed, invisible reservation that sizes the space and bounds them (so geometry, containment and persisted offsets are unchanged, and the change is a drawing rule, not a layout rule). A folder with no subfolders is still just its named disc. The one exception is the vault root's compartment, outlined dashed while the root notes are hidden, as the sign of that. Notes of a folder are therefore not fenced off from its subfolder discs visually, only by the reservation; if notes ever need to use the gaps between subfolder discs, that is a change to the containment region (a disc minus its children), not to the packing.
+
+Spacing: see the third-pass paragraph in `src/layout.ts`. The bench has a hub-and-spoke case and reports hub versus leaf radial fraction and nearest-neighbour spacing.

@@ -1,6 +1,6 @@
 # Edge treatment in the nested graph
 
-Status: the first increment is implemented (`src/edges.ts`, the nested branch of `paint` in `src/graph-view.tsx`, an `edges` pref and a toolbar toggle); E2, E3 and focus-time direction are not. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture. Revised after review; the first increment is E1 plus conservative viewport culling plus an edge show/hide toggle, in nested mode only. E2 and E3 are deferred, and batching is evaluated as a deliberate visual change.
+Status: the first increment is implemented (`src/edges.ts`, the nested branch of `paint` in `src/graph-view.tsx`, an `edges` pref and a toolbar toggle); E2, E3 and focus-time direction are not. Written after the nested regions shipped (see [nested-folder-regions.md](nested-folder-regions.md)), when the live vault showed that edges, not regions or notes, now dominate the picture. Revised after review; the first increment is E1 plus conservative viewport culling plus an edge show/hide toggle, in every layout (extended from nested-only on request, to keep one edge implementation). E2 and E3 are deferred, and batching is evaluated as a deliberate visual change.
 
 ## Context and motivation
 
@@ -69,7 +69,7 @@ Stroking many separate translucent paths accumulates opacity where they cross or
 
 - Classes, one-line-per-pair dedupe and the viewport test live in `src/edges.ts` and are unit-tested; the dedupe is built once per graph, not per paint. Alphas are `EDGE_ALPHA` in `graph-view.tsx` (across 0.15, top 0.28, compartment 0.5), tuned by eye on the demo vault in both themes against the previous composite; the `across` class uses the theme stroke token, the others the folder hue. A non-incident edge keeps a quarter of its strength while a note is focused.
 - Edges are batched per class and hue (one path and one stroke each). This is adopted, but the before/after image comparison the section above asks for was not made on a dense graph: the demo vault is sparse, so the accumulation difference is not visible in it. Judge it on the live vault; per-edge strokes are a small change back if the union look is wrong.
-- The `edges` pref hides every edge in every layout; tiering and the dedupe apply in nested mode only, and the local graph bypasses them (`tierEdges`).
+- One implementation for every layout (nested, folders, free): the `edges` pref hides every edge, and the tiers and the dedupe apply everywhere; the local graph bypasses the tiers (`tierEdges`), drawing every edge alike in one neutral group. In the non-nested layouts the hue is the top-level folder's, or one colour in the free layout.
 - The paint bench has not been given a dense case, so no cost claim is made.
 
 ## Deferred
